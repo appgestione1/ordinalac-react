@@ -118,10 +118,11 @@ export default function ClientApp() {
     if (!opticianId) return;
     try {
       const docRef = await addDoc(collection(db, 'change_requests'), {
-        optician_id: opticianId,
-        client_name: name,
-        status: 'pending',
-        created_at: serverTimestamp(),
+        optician_id:  opticianId,
+        client_name:  name,
+        client_uid:   auth.currentUser?.uid || null,
+        status:       'pending',
+        created_at:   serverTimestamp(),
         current_data: { manufacturer, model, od, os },
       });
       lss('changeReqId', docRef.id);

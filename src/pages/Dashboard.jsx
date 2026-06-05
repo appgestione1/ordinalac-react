@@ -4,7 +4,7 @@ import {
 } from 'firebase/auth';
 import {
   collection, doc, getDoc, setDoc, updateDoc, deleteDoc,
-  onSnapshot, query, where
+  onSnapshot, query, where, arrayUnion
 } from 'firebase/firestore';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { auth, db } from '../firebase';
@@ -948,9 +948,27 @@ function RequestModal({ req, myLensData, onClose }) {
   const inputCls = "w-full border rounded p-1 text-sm";
 
   async function save() {
+    const newData = { manufacturer: manuf, model, od, os };
     await updateDoc(doc(db, 'change_requests', req.id), {
-      new_data: { manufacturer: manuf, model, od, os }, status: 'completed'
+      new_data: newData, status: 'completed'
     });
+
+    // Aggiorna client_profiles con nuova prescrizione + storico
+    if (req.client_uid) {
+      const historyEntry = {
+        ...newData,
+        updated_at: new Date().toISOString(),
+        updated_by: 'optician',
+        optician_id: req.optician_id,
+        client_name: req.client_name || '',
+      };
+      setDoc(doc(db, 'client_profiles', req.client_uid), {
+        lens: newData,
+        updated_at: new Date(),
+        prescription_history: arrayUnion(historyEntry),
+      }, { merge: true }).catch(() => {});
+    }
+
     alert('Aggiornamento inviato al cliente!');
     onClose();
   }

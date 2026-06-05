@@ -941,6 +941,39 @@ function ClientiTab() {
                   <p className="text-xs text-gray-400 mt-2">Quantità: OD {l.od?.qty || 1} pz. · OS {l.os?.qty || 1} pz.</p>
                 </div>
 
+                {/* Storico prescrizioni */}
+                {cp?.prescription_history?.length > 0 && (
+                  <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+                    <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-3">
+                      Storico Aggiornamenti Prescrizione ({cp.prescription_history.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {[...cp.prescription_history]
+                        .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+                        .map((h, i) => {
+                          const date = h.updated_at
+                            ? new Date(h.updated_at).toLocaleString('it-IT', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                            : '—';
+                          return (
+                            <div key={i} className="bg-white border border-amber-100 rounded-lg px-3 py-2.5 text-xs">
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="font-semibold text-amber-800">{date}</span>
+                                <span className="text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full text-xs">
+                                  {h.updated_by === 'optician' ? 'da ottico' : 'dal cliente'}
+                                </span>
+                              </div>
+                              <p className="font-bold text-gray-700">{h.manufacturer} {h.model}</p>
+                              <div className="mt-1 space-y-0.5">
+                                <EyeRow label="OD" eye={h.od} color="text-blue-600" />
+                                <EyeRow label="OS" eye={h.os} color="text-green-600" />
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Storico ordini */}
                 {c.orders?.length > 1 && (
                   <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
