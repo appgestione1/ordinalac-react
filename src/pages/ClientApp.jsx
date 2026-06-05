@@ -409,35 +409,38 @@ export default function ClientApp() {
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm uppercase bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
             </div>
 
-            {delivery === 'delivery' && (
-              <div className="bg-gray-50 p-4 rounded-md border border-gray-200 space-y-3">
-                <h2 className="text-sm font-semibold text-gray-700 border-b pb-1">Indirizzo di Consegna</h2>
-                <div className="flex space-x-2">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-500">Via / Piazza</label>
-                    <input type="text" value={addrStreet} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
-                  </div>
-                  <div className="w-20">
-                    <label className="block text-xs font-medium text-gray-500">N.</label>
-                    <input type="text" value={addrNum} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
-                  </div>
+            <div className={`p-4 rounded-md border space-y-3 transition ${delivery === 'delivery' ? 'bg-gray-50 border-gray-200' : 'bg-gray-50 border-dashed border-gray-200 opacity-60'}`}>
+              <div className="flex justify-between items-center border-b pb-1">
+                <h2 className="text-sm font-semibold text-gray-700">Indirizzo di Consegna</h2>
+                {delivery !== 'delivery' && (
+                  <span className="text-xs text-gray-400 italic">usato solo per consegna a domicilio</span>
+                )}
+              </div>
+              <div className="flex space-x-2">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500">Via / Piazza</label>
+                  <input type="text" value={addrStreet} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
                 </div>
-                <div className="flex space-x-2">
-                  <div className="w-24">
-                    <label className="block text-xs font-medium text-gray-500">CAP</label>
-                    <input type="text" value={addrCap} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-500">Città</label>
-                    <input type="text" value={addrCity} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
-                  </div>
-                  <div className="w-16">
-                    <label className="block text-xs font-medium text-gray-500">Prov.</label>
-                    <input type="text" value={addrProv} readOnly maxLength={2} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm uppercase bg-gray-100 text-gray-500" />
-                  </div>
+                <div className="w-20">
+                  <label className="block text-xs font-medium text-gray-500">N.</label>
+                  <input type="text" value={addrNum} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
                 </div>
               </div>
-            )}
+              <div className="flex space-x-2">
+                <div className="w-24">
+                  <label className="block text-xs font-medium text-gray-500">CAP</label>
+                  <input type="text" value={addrCap} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500">Città</label>
+                  <input type="text" value={addrCity} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
+                </div>
+                <div className="w-16">
+                  <label className="block text-xs font-medium text-gray-500">Prov.</label>
+                  <input type="text" value={addrProv} readOnly maxLength={2} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm uppercase bg-gray-100 text-gray-500" />
+                </div>
+              </div>
+            </div>
 
             <div className="flex items-start mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
               <input id="privacy" type="checkbox" checked={privacy} onChange={e => setPrivacy(e.target.checked)}
@@ -588,7 +591,9 @@ export default function ClientApp() {
               <div className="flex justify-between items-center mt-3">
                 <span className="text-gray-700 font-medium text-sm">OCCHIO DESTRO</span>
                 <div className="flex items-center space-x-1">
-                  <input type="number" min="1" value={quickQtyOD} onChange={e => setQuickQtyOD(Math.max(1, parseInt(e.target.value) || 1).toString())}
+                  <input type="number" min="1" value={quickQtyOD}
+                    onChange={e => setQuickQtyOD(e.target.value)}
+                    onBlur={e => setQuickQtyOD(Math.max(1, parseInt(e.target.value) || 1).toString())}
                     className="w-14 px-2 py-1 border border-gray-300 rounded-md text-center bg-white text-gray-900 text-sm" />
                   <span className="text-sm text-gray-600">pz.</span>
                 </div>
@@ -601,7 +606,9 @@ export default function ClientApp() {
               <div className="flex justify-between items-center mt-3">
                 <span className="text-gray-700 font-medium text-sm">OCCHIO SINISTRO</span>
                 <div className="flex items-center space-x-1">
-                  <input type="number" min="1" value={quickQtyOS} onChange={e => setQuickQtyOS(Math.max(1, parseInt(e.target.value) || 1).toString())}
+                  <input type="number" min="1" value={quickQtyOS}
+                    onChange={e => setQuickQtyOS(e.target.value)}
+                    onBlur={e => setQuickQtyOS(Math.max(1, parseInt(e.target.value) || 1).toString())}
                     className="w-14 px-2 py-1 border border-gray-300 rounded-md text-center bg-white text-gray-900 text-sm" />
                   <span className="text-sm text-gray-600">pz.</span>
                 </div>
