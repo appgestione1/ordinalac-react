@@ -121,6 +121,8 @@ export default function ClientApp() {
         optician_id:  opticianId,
         client_name:  name,
         client_uid:   auth.currentUser?.uid || null,
+        client_phone: phone || null,
+        client_email: email || null,
         status:       'pending',
         created_at:   serverTimestamp(),
         current_data: { manufacturer, model, od, os },
@@ -345,6 +347,20 @@ export default function ClientApp() {
       // Reset quantità a 1 dopo l'ordine
       setQuickQtyOD('1'); setQuickQtyOS('1');
       lss('qtyOD', '1'); lss('qtyOS', '1');
+
+      // Crea/aggiorna client_profiles — garantisce che esiste anche senza "Conferma Installazione"
+      const uid = auth.currentUser?.uid;
+      if (uid && opticianId) {
+        setDoc(doc(db, 'client_profiles', uid), {
+          name, phone: cleanPhone, email, cf,
+          optician_id: opticianId,
+          address: { street: addrStreet, num: addrNum, cap: addrCap, city: addrCity, province: addrProv, full: addrFull },
+          lens: { manufacturer, model, od, os },
+          privacy_accepted: true,
+          updated_at: serverTimestamp(),
+        }, { merge: true }).catch(err => console.error('client_profiles write error:', err));
+      }
+
       setOrderStatus('success');
       setTimeout(() => setOrderStatus('idle'), 4000);
     } catch (e) {

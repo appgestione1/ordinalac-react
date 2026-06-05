@@ -3,7 +3,7 @@ import {
   signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword
 } from 'firebase/auth';
 import {
-  collection, doc, getDoc, setDoc, updateDoc, deleteDoc,
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   onSnapshot, query, where, arrayUnion
 } from 'firebase/firestore';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
@@ -953,20 +953,45 @@ function RequestModal({ req, myLensData, onClose }) {
       new_data: newData, status: 'completed'
     });
 
-    // Aggiorna client_profiles con nuova prescrizione + storico
-    if (req.client_uid) {
-      const historyEntry = {
-        ...newData,
-        updated_at: new Date().toISOString(),
-        updated_by: 'optician',
-        optician_id: req.optician_id,
-        client_name: req.client_name || '',
-      };
-      setDoc(doc(db, 'client_profiles', req.client_uid), {
-        lens: newData,
-        updated_at: new Date(),
-        prescription_history: arrayUnion(historyEntry),
-      }, { merge: true }).catch(() => {});
+    // Aggiorna client_profiles con nuova prescrizione + voce storico
+    const historyEntry = {
+      ...newData,
+      updated_at:  new Date().toISOString(),
+      updated_by:  'optician',
+      optician_id: req.optician_id,
+      client_name: req.client_name || '',
+    };
+    const profileUpdate = {
+      lens:                  newData,
+      updated_at:            new Date(),
+      prescription_history:  arrayUnion(historyEntry),
+    };
+
+    try {
+      if (req.client_uid) {
+        // Percorso diretto tramite uid
+        await setDoc(doc(db, 'client_profiles', req.client_uid), profileUpdate, { merge: true });
+      } else {
+        // Fallback: cerca per ottico + telefono o email
+        const searchField = req.client_phone ? 'phone' : req.client_email ? 'email' : null;
+        const searchValue = req.client_phone || req.client_email || null;
+        if (searchField && searchValue) {
+          const snap = await getDocs(query(
+            collection(db, 'client_profiles'),
+            where('optician_id', '==', req.optician_id),
+            where(searchField, '==', searchValue)
+          ));
+          if (!snap.empty) {
+            await updateDoc(snap.docs[0].ref, profileUpdate);
+          } else {
+            console.warn('client_profiles: nessun profilo trovato per questo cliente');
+          }
+        } else {
+          console.warn('client_profiles: client_uid e phone/email mancanti nella change_request');
+        }
+      }
+    } catch (err) {
+      console.error('Errore aggiornamento client_profiles:', err);
     }
 
     alert('Aggiornamento inviato al cliente!');
