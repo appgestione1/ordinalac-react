@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { signInAnonymously } from 'firebase/auth';
-import { doc, getDoc, addDoc, onSnapshot, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, addDoc, onSnapshot, collection, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import EyeConfig from '../components/EyeConfig';
 
@@ -256,14 +256,19 @@ export default function ClientApp() {
   }
 
   // ── Salva impostazioni ──────────────────────────────────────────────
-  function saveSettings() {
+  async function saveSettings() {
     if (!name.trim()) { alert('Inserisci il tuo nome e cognome per continuare.'); return; }
     if (!privacy) { alert('Devi accettare la Privacy Policy per continuare.'); return; }
     const streetFull = [addrStreet.trim(), addrNum.trim()].filter(Boolean).join(' ');
     const addrFull = `${streetFull}, ${addrCap} ${addrCity} (${addrProv})`.trim();
 
-    lss('name', name.trim()); lss('phone', phone.trim());
-    lss('email', email.trim()); lss('cf', cf.trim().toUpperCase());
+    const cleanName  = name.trim();
+    const cleanPhone = phone.trim();
+    const cleanEmail = email.trim();
+    const cleanCf    = cf.trim().toUpperCase();
+
+    lss('name', cleanName); lss('phone', cleanPhone);
+    lss('email', cleanEmail); lss('cf', cleanCf);
     lss('addrStreet', addrStreet); lss('addrNum', addrNum);
     lss('addrCap', addrCap); lss('addrCity', addrCity); lss('addrProv', addrProv);
     lss('address', addrFull); lss('privacy', 'true');
@@ -273,6 +278,19 @@ export default function ClientApp() {
     lss('pwrOD', od.pwr); lss('cylOD', od.cyl); lss('axisOD', od.axis); lss('addOD', od.add);
     lss('qtyOS', os.qty); lss('typeOS', os.type);
     lss('pwrOS', os.pwr); lss('cylOS', os.cyl); lss('axisOS', os.axis); lss('addOS', os.add);
+
+    // Salva/aggiorna profilo cliente su Firestore
+    const uid = auth.currentUser?.uid;
+    if (uid && opticianId) {
+      setDoc(doc(db, 'client_profiles', uid), {
+        name: cleanName, phone: cleanPhone, email: cleanEmail, cf: cleanCf,
+        optician_id: opticianId,
+        address: { street: addrStreet, num: addrNum, cap: addrCap, city: addrCity, province: addrProv, full: addrFull },
+        lens: { manufacturer, model, od, os },
+        privacy_accepted: true,
+        updated_at: serverTimestamp(),
+      }, { merge: true }).catch(() => {});
+    }
 
     setAskModal(true);
   }
@@ -419,25 +437,30 @@ export default function ClientApp() {
               <div className="flex space-x-2">
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-gray-500">Via / Piazza</label>
-                  <input type="text" value={addrStreet} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
+                  <input type="text" value={addrStreet} onChange={e => setAddrStreet(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
                 </div>
                 <div className="w-20">
                   <label className="block text-xs font-medium text-gray-500">N.</label>
-                  <input type="text" value={addrNum} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
+                  <input type="text" value={addrNum} onChange={e => setAddrNum(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
                 </div>
               </div>
               <div className="flex space-x-2">
                 <div className="w-24">
                   <label className="block text-xs font-medium text-gray-500">CAP</label>
-                  <input type="text" value={addrCap} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
+                  <input type="text" value={addrCap} onChange={e => setAddrCap(e.target.value)} maxLength={5}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
                 </div>
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-gray-500">Città</label>
-                  <input type="text" value={addrCity} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-500" />
+                  <input type="text" value={addrCity} onChange={e => setAddrCity(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
                 </div>
                 <div className="w-16">
                   <label className="block text-xs font-medium text-gray-500">Prov.</label>
-                  <input type="text" value={addrProv} readOnly maxLength={2} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm uppercase bg-gray-100 text-gray-500" />
+                  <input type="text" value={addrProv} onChange={e => setAddrProv(e.target.value.toUpperCase())} maxLength={2}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm uppercase bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500 text-center" />
                 </div>
               </div>
             </div>
@@ -448,7 +471,7 @@ export default function ClientApp() {
               <div className="ml-3 text-sm">
                 <label htmlFor="privacy" className="font-bold text-gray-800 cursor-pointer">Consenso Privacy (GDPR)</label>
                 <p className="text-gray-600 text-xs mt-1 text-justify">
-                  Dichiaro di aver preso visione dell'informativa privacy ai sensi del Regolamento UE 2016/679. Acconsento al trattamento dei miei dati personali (inclusi i dati optometrici) per la gestione dell'ordine, la fatturazione e le comunicazioni di servizio. I dati potranno essere comunicati al fornitore di lenti a contatto esclusivamente per l'evasione dell'ordine e la spedizione.
+                  Dichiaro di aver preso visione dell'informativa privacy ai sensi del Regolamento UE 2016/679. Acconsento al trattamento dei miei dati personali (inclusi i dati optometrici) per la gestione dell'ordine, la fatturazione e le comunicazioni di servizio. I dati potranno essere comunicati a terzi (fornitore, corriere) esclusivamente per l'evasione dell'ordine e la spedizione.
                 </p>
               </div>
             </div>

@@ -46,5 +46,12 @@ service cloud.firestore {
     match /config/{docId} {
       allow read, write: if isAuth();
     }
+
+    // Profili clienti: il cliente scrive/aggiorna il proprio (auth anonima),
+    // gli ottici e admin leggono tutti
+    match /client_profiles/{uid} {
+      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read: if isAuth();
+    }
   }
 }

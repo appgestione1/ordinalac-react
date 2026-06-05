@@ -737,6 +737,7 @@ function ClientiTab() {
   const [loadingOpt, setLoadingOpt]   = useState(true);
   const [loadingCli, setLoadingCli]   = useState(false);
   const [selClient, setSelClient]     = useState(null);
+  const [clientProfile, setClientProfile] = useState(null);
   const [search, setSearch]           = useState('');
 
   useEffect(() => {
@@ -848,7 +849,21 @@ function ClientiTab() {
                 : filtered.map((c, i) => {
                   const l = c.lens_order || {};
                   return (
-                    <button key={i} onClick={() => setSelClient(c)}
+                    <button key={i} onClick={async () => {
+                      setSelClient(c); setClientProfile(null);
+                      // Cerca profilo aggiornato in client_profiles
+                      // Prova a trovarlo per optician_id + phone o email
+                      try {
+                        const phone = c.client_info?.phone;
+                        const email = c.client_info?.email;
+                        const snap = await getDocs(query(
+                          collection(db, 'client_profiles'),
+                          where('optician_id', '==', selOpt?.uid),
+                          ...(phone ? [where('phone', '==', phone)] : email ? [where('email', '==', email)] : [])
+                        ));
+                        if (!snap.empty) setClientProfile(snap.docs[0].data());
+                      } catch { /* nessun profilo aggiornato */ }
+                    }}
                       className={`w-full text-left px-3 py-3 border-b border-gray-50 transition ${selClient === c ? 'bg-indigo-50 border-l-4 border-l-indigo-500' : 'hover:bg-gray-50'}`}>
                       <p className={`text-sm font-semibold truncate ${selClient === c ? 'text-indigo-700' : 'text-gray-800'}`}>{c.patient_name || '—'}</p>
                       <p className="text-xs text-gray-500 truncate">{l.manufacturer} {l.model}</p>
@@ -875,13 +890,22 @@ function ClientiTab() {
           const lastOrder = c.timestamp?.seconds
             ? new Date(c.timestamp.seconds * 1000).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
             : '—';
+          // Usa dati aggiornati da client_profiles se disponibili
+          const cp  = clientProfile;
+          const ci2 = cp ? { phone: cp.phone, email: cp.email, cf: cp.cf } : ci;
+          const addr2 = cp?.address?.full || del.address_full;
+          const lens2 = cp?.lens || {};
+          const updatedAt = cp?.updated_at?.seconds
+            ? new Date(cp.updated_at.seconds * 1000).toLocaleString('it-IT', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : null;
           return (
             <>
               <div className="p-4 border-b border-gray-100 bg-gray-50">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">{c.patient_name}</h2>
+                    <h2 className="text-xl font-bold text-gray-900">{cp?.name || c.patient_name}</h2>
                     <p className="text-xs text-gray-500 mt-0.5">Ultimo ordine: {lastOrder} · {c.orders?.length || 1} ordine/i totali</p>
+                    {updatedAt && <p className="text-xs text-blue-500 mt-0.5">Profilo aggiornato dal cliente: {updatedAt}</p>}
                   </div>
                   {ci.privacy_accepted && (
                     <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-2 py-1 rounded-full font-bold">✓ Privacy accettata</span>
@@ -895,22 +919,24 @@ function ClientiTab() {
                 <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
                   <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Dati Personali</h4>
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    {[['Telefono', ci.phone], ['Email', ci.email], ['Cod. Fiscale', ci.cf]].map(([k, v]) => v ? (
+                    {[['Telefono', ci2.phone], ['Email', ci2.email], ['Cod. Fiscale', ci2.cf]].map(([k, v]) => v ? (
                       <div key={k}><p className="text-xs text-gray-400">{k}</p><p className="font-medium text-gray-800">{v}</p></div>
                     ) : null)}
                   </div>
-                  {del.address_full && del.mode === 'delivery' && (
-                    <div className="mt-3"><p className="text-xs text-gray-400">Indirizzo consegna</p><p className="text-sm font-medium text-gray-800">{del.address_full}</p></div>
+                  {addr2 && (
+                    <div className="mt-3"><p className="text-xs text-gray-400">Indirizzo consegna</p><p className="text-sm font-medium text-gray-800">{addr2}</p></div>
                   )}
                 </div>
 
                 {/* Prescrizione lenti */}
                 <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
                   <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Prescrizione Lenti</h4>
-                  <p className="text-sm font-bold text-gray-800 mb-2">{l.manufacturer} {l.model}</p>
+                  <p className="text-sm font-bold text-gray-800 mb-2">
+                    {(lens2.manufacturer || l.manufacturer)} {(lens2.model || l.model)}
+                  </p>
                   <div className="space-y-1.5">
-                    <EyeRow label="OD" eye={l.od} color="text-blue-600" />
-                    <EyeRow label="OS" eye={l.os} color="text-green-600" />
+                    <EyeRow label="OD" eye={lens2.od || l.od} color="text-blue-600" />
+                    <EyeRow label="OS" eye={lens2.os || l.os} color="text-green-600" />
                   </div>
                   <p className="text-xs text-gray-400 mt-2">Quantità: OD {l.od?.qty || 1} pz. · OS {l.os?.qty || 1} pz.</p>
                 </div>
