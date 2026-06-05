@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { signInAnonymously } from 'firebase/auth';
-import { doc, getDoc, setDoc, addDoc, onSnapshot, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, addDoc, onSnapshot, collection, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import EyeConfig from '../components/EyeConfig';
 
@@ -111,6 +111,32 @@ export default function ClientApp() {
       setChangeReqDone(true);
       setTimeout(() => setChangeReqDone(false), 6000);
       fetchLensData(ls('opticianId'));
+
+      // Aggiorna client_profiles lato cliente — auth garantita (client scrive il proprio uid)
+      const uid = auth.currentUser?.uid;
+      const oid = ls('opticianId');
+      if (uid && oid) {
+        const newLens = {
+          manufacturer: nd.manufacturer || '',
+          model:        nd.model || '',
+          od:           nd.od || {},
+          os:           nd.os || {},
+        };
+        const historyEntry = {
+          ...newLens,
+          updated_at:  new Date().toISOString(),
+          updated_by:  'optician',
+          optician_id: oid,
+          client_name: ls('name'),
+        };
+        setDoc(doc(db, 'client_profiles', uid), {
+          lens:                 newLens,
+          updated_at:           serverTimestamp(),
+          prescription_history: arrayUnion(historyEntry),
+        }, { merge: true })
+          .then(() => console.log('client_profiles aggiornato con nuova prescrizione'))
+          .catch(err => console.error('client_profiles update error:', err));
+      }
     });
   }
 
