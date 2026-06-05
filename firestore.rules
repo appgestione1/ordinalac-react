@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAnonymous() {
+      return request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+    function isAuth() {
+      return request.auth != null && !isAnonymous();
+    }
+
+    // Ordini: i client (anche anonimi) creano, gli autenticati leggono/modificano/eliminano
+    match /orders/{orderId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if isAuth();
+    }
+
+    // Richieste modifica prescrizione: i client anonimi creano, tutti gli autenticati leggono/aggiornano
+    match /change_requests/{reqId} {
+      allow create: if request.auth != null;
+      allow read, update: if request.auth != null;
+    }
+
+    // Catalogo master: leggibile da tutti gli autenticati, scrivibile solo dai non anonimi (ottici + admin)
+    match /catalogs/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAuth();
+    }
+
+    // Config ottico (listino lenti):
+    //   - leggibile da tutti gli autenticati (i client devono caricare il catalogo dell'ottico)
+    //   - scrivibile da qualsiasi utente autenticato non anonimo
+    //     (l'ottico scrive il suo, il SuperAdmin scrive quello di qualsiasi ottico)
+    match /optician_config/{uid}/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if isAuth();
+    }
+
+    // Registro ottici: scrivibile da non anonimi (ogni ottico registra se stesso al login),
+    // leggibile solo da non anonimi (il SuperAdmin legge la lista)
+    match /opticians/{uid} {
+      allow read, write: if isAuth();
+    }
+
+    // Config admin (password easter egg dashboard): solo non anonimi
+    match /config/{docId} {
+      allow read, write: if isAuth();
+    }
+  }
+}
