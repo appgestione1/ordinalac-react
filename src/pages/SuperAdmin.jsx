@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 // Email dedicata SuperAdmin — non collegata a nessun ottico registrato
@@ -504,6 +504,216 @@ function OtticiTab({ catalog }) {
   );
 }
 
+// ── Forniture ─────────────────────────────────────────────────────────
+const SUPPLY_STATUS = {
+  pending:    { label: 'In attesa',     bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-300' },
+  processing: { label: 'In lavorazione', bg: 'bg-blue-100',   text: 'text-blue-800',   border: 'border-blue-300'   },
+  shipped:    { label: 'Spedito',        bg: 'bg-green-100',  text: 'text-green-800',  border: 'border-green-300'  },
+};
+
+function FornitureTab() {
+  const [orders, setOrders]         = useState([]);
+  const [opticians, setOpticians]   = useState({}); // uid → data
+  const [loading, setLoading]       = useState(true);
+  const [updating, setUpdating]     = useState(null); // orderId being updated
+  const [filter, setFilter]         = useState('active'); // 'active' | 'shipped'
+
+  useEffect(() => {
+    // Carica ottici per nome/indirizzo
+    getDocs(collection(db, 'opticians')).then(snap => {
+      const map = {};
+      snap.docs.forEach(d => { map[d.id] = d.data(); });
+      setOpticians(map);
+    });
+
+    // Carica ordini con supply_request
+    getDocs(query(
+      collection(db, 'orders'),
+      where('supply_request.status', 'in', ['pending', 'processing', 'shipped']),
+      orderBy('supply_request.requested_at', 'desc')
+    )).then(snap => {
+      setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }).catch(() => {
+      // Fallback senza orderBy se l'indice non esiste
+      getDocs(query(
+        collection(db, 'orders'),
+        where('supply_request.status', 'in', ['pending', 'processing', 'shipped'])
+      )).then(snap => {
+        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        list.sort((a, b) => (b.supply_request?.requested_at?.seconds || 0) - (a.supply_request?.requested_at?.seconds || 0));
+        setOrders(list);
+        setLoading(false);
+      }).catch(() => setLoading(false));
+    });
+  }, []);
+
+  async function updateStatus(orderId, newStatus) {
+    setUpdating(orderId);
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        'supply_request.status': newStatus,
+        ...(newStatus === 'shipped' ? { 'supply_request.shipped_at': new Date() } : {}),
+      });
+      setOrders(list => list.map(o => o.id === orderId
+        ? { ...o, supply_request: { ...o.supply_request, status: newStatus } }
+        : o
+      ));
+    } catch { alert('Errore aggiornamento. Riprova.'); }
+    setUpdating(null);
+  }
+
+  const visible = orders.filter(o =>
+    filter === 'active'
+      ? ['pending','processing'].includes(o.supply_request?.status)
+      : o.supply_request?.status === 'shipped'
+  );
+
+  return (
+    <div className="max-w-5xl mx-auto p-6">
+
+      {/* Filtri */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex gap-2">
+          {[['active','In attesa / Lavorazione'],['shipped','Spediti']].map(([id, label]) => (
+            <button key={id} onClick={() => setFilter(id)}
+              className={`px-4 py-1.5 rounded-full text-sm font-semibold transition ${filter === id ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:border-indigo-400'}`}>
+              {label}
+              {id === 'active' && orders.filter(o => ['pending','processing'].includes(o.supply_request?.status)).length > 0 && (
+                <span className="ml-2 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5">
+                  {orders.filter(o => ['pending','processing'].includes(o.supply_request?.status)).length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400">{visible.length} ordini</p>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600" /></div>
+      ) : visible.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <p className="text-gray-400 font-medium">Nessun ordine fornitore {filter === 'active' ? 'in attesa' : 'spedito'}.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {visible.map(order => {
+            const sr   = order.supply_request || {};
+            const l    = order.lens_order || {};
+            const conf = SUPPLY_STATUS[sr.status] || SUPPLY_STATUS.pending;
+            const opt  = opticians[order.optician_id] || {};
+            const isClient = sr.destination === 'client';
+            const reqDate  = sr.requested_at?.seconds
+              ? new Date(sr.requested_at.seconds * 1000).toLocaleString('it-IT', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+              : '—';
+
+            // Indirizzo destinazione
+            const clientAddr = order.delivery?.address_full || '—';
+            const storeAddr  = opt.via
+              ? `${[opt.via, opt.civico].filter(Boolean).join(' ')}, ${opt.cap} ${opt.citta} (${opt.provincia})`
+              : '—';
+
+            return (
+              <div key={order.id} className={`bg-white rounded-xl border-l-4 ${conf.border} shadow-sm p-5`}>
+                {/* Header */}
+                <div className="flex justify-between items-start mb-3 flex-wrap gap-2">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${conf.bg} ${conf.text}`}>{conf.label}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${isClient ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {isClient ? '🟣 Spedizione → CLIENTE' : '🟠 Spedizione → NEGOZIO'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">Richiesto: {reqDate}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    {sr.status === 'pending' && (
+                      <button onClick={() => updateStatus(order.id, 'processing')} disabled={updating === order.id}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg disabled:opacity-60">
+                        Prendi in carico
+                      </button>
+                    )}
+                    {sr.status === 'processing' && (
+                      <button onClick={() => updateStatus(order.id, 'shipped')} disabled={updating === order.id}
+                        className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg disabled:opacity-60">
+                        Segna come Spedito
+                      </button>
+                    )}
+                    {sr.status === 'pending' && (
+                      <button onClick={() => updateStatus(order.id, 'shipped')} disabled={updating === order.id}
+                        className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold rounded-lg disabled:opacity-60">
+                        Spedito direttamente
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  {/* Lente */}
+                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">Lente</p>
+                    <p className="font-semibold text-gray-800">{l.manufacturer} {l.model}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      <span className="font-bold text-blue-600">OD</span> {l.od?.type || '—'}
+                      {l.od?.pwr  && ` · Sf.${l.od.pwr}`}
+                      {l.od?.cyl  && ` · Cil.${l.od.cyl}`}
+                      {l.od?.axis && ` · Ax.${l.od.axis}`}
+                      {l.od?.add  && ` · ADD ${l.od.add}`}
+                      {` (${l.od?.qty || 1} pz.)`}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      <span className="font-bold text-green-600">OS</span> {l.os?.type || '—'}
+                      {l.os?.pwr  && ` · Sf.${l.os.pwr}`}
+                      {l.os?.cyl  && ` · Cil.${l.os.cyl}`}
+                      {l.os?.axis && ` · Ax.${l.os.axis}`}
+                      {l.os?.add  && ` · ADD ${l.os.add}`}
+                      {` (${l.os?.qty || 1} pz.)`}
+                    </p>
+                  </div>
+
+                  {/* Paziente */}
+                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">Paziente</p>
+                    <p className="font-semibold text-gray-800">{order.patient_name || '—'}</p>
+                    {order.client_info?.phone && <p className="text-xs text-gray-600 mt-1">📞 {order.client_info.phone}</p>}
+                    {order.client_info?.email && <p className="text-xs text-gray-600">✉ {order.client_info.email}</p>}
+                  </div>
+
+                  {/* Destinazione spedizione */}
+                  <div className={`rounded-lg p-3 border ${isClient ? 'bg-purple-50 border-purple-100' : 'bg-orange-50 border-orange-100'}`}>
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">
+                      {isClient ? 'Indirizzo Cliente' : 'Indirizzo Ottico'}
+                    </p>
+                    {isClient ? (
+                      <>
+                        <p className="font-semibold text-gray-800">{order.patient_name}</p>
+                        <p className="text-xs text-gray-600 mt-1">{clientAddr}</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-semibold text-gray-800">{opt.ragioneSociale || opt.email || '—'}</p>
+                        <p className="text-xs text-gray-600 mt-1">{storeAddr}</p>
+                        {opt.telefono && <p className="text-xs text-gray-600 mt-0.5">📞 {opt.telefono}</p>}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Ottico richiedente */}
+                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
+                  <span className="text-xs text-gray-400">Ottico:</span>
+                  <span className="text-xs font-semibold text-gray-600">{opt.ragioneSociale || opt.email || order.optician_id}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Catalogo Master (3 colonne) ───────────────────────────────────────
 function CatalogoTab({ catalog, setCatalog, saving, setSaving }) {
   const [saveMsg, setSaveMsg]   = useState('');
@@ -731,8 +941,9 @@ function SuperAdminPanel({ user }) {
   }
 
   const TABS = [
-    { id: 'catalog', label: 'Catalogo Master' },
-    { id: 'ottici',  label: 'Gestione Ottici' },
+    { id: 'catalog',   label: 'Catalogo Master' },
+    { id: 'ottici',    label: 'Gestione Ottici' },
+    { id: 'forniture', label: 'Forniture' },
   ];
 
   if (loading) return (
@@ -776,7 +987,8 @@ function SuperAdminPanel({ user }) {
       </nav>
 
       {activeTab === 'catalog' && <CatalogoTab catalog={catalog} setCatalog={setCatalog} saving={saving} setSaving={setSaving} />}
-      {activeTab === 'ottici'  && <OtticiTab catalog={catalog} />}
+      {activeTab === 'ottici'    && <OtticiTab catalog={catalog} />}
+      {activeTab === 'forniture' && <FornitureTab />}
 
       {/* Modal cambio password dashboard */}
       {showPwdModal && (
