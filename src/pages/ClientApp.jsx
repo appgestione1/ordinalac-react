@@ -448,7 +448,7 @@ export default function ClientApp() {
               <div className="ml-3 text-sm">
                 <label htmlFor="privacy" className="font-bold text-gray-800 cursor-pointer">Consenso Privacy (GDPR)</label>
                 <p className="text-gray-600 text-xs mt-1 text-justify">
-                  Dichiaro di aver preso visione dell'informativa privacy ai sensi del Regolamento UE 2016/679. Acconsento al trattamento dei miei dati personali (inclusi i dati optometrici) per la gestione dell'ordine, la fatturazione e le comunicazioni di servizio.
+                  Dichiaro di aver preso visione dell'informativa privacy ai sensi del Regolamento UE 2016/679. Acconsento al trattamento dei miei dati personali (inclusi i dati optometrici) per la gestione dell'ordine, la fatturazione e le comunicazioni di servizio. I dati potranno essere comunicati al fornitore di lenti a contatto esclusivamente per l'evasione dell'ordine e la spedizione.
                 </p>
               </div>
             </div>

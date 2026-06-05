@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 // Email dedicata SuperAdmin — non collegata a nessun ottico registrato
@@ -646,6 +646,21 @@ function FornitureTab() {
                         Spedito direttamente
                       </button>
                     )}
+                    {sr.status === 'shipped' && (
+                      <button onClick={async () => {
+                        if (!confirm('Rimuovere questo ordine dagli archivi fornitore?')) return;
+                        setUpdating(order.id);
+                        try {
+                          await updateDoc(doc(db, 'orders', order.id), { supply_request: deleteField() });
+                          setOrders(list => list.filter(o => o.id !== order.id));
+                        } catch { alert('Errore eliminazione. Riprova.'); }
+                        setUpdating(null);
+                      }} disabled={updating === order.id}
+                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold rounded-lg disabled:opacity-60 flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        Archivia
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -710,6 +725,223 @@ function FornitureTab() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Clienti ───────────────────────────────────────────────────────────
+function ClientiTab() {
+  const [opticians, setOpticians]     = useState([]);
+  const [selOpt, setSelOpt]           = useState(null);
+  const [clients, setClients]         = useState([]);
+  const [loadingOpt, setLoadingOpt]   = useState(true);
+  const [loadingCli, setLoadingCli]   = useState(false);
+  const [selClient, setSelClient]     = useState(null);
+  const [search, setSearch]           = useState('');
+
+  useEffect(() => {
+    getDocs(collection(db, 'opticians')).then(snap => {
+      const list = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+      list.sort((a, b) => (a.ragioneSociale || a.email || '').localeCompare(b.ragioneSociale || b.email || ''));
+      setOpticians(list);
+      setLoadingOpt(false);
+    }).catch(() => setLoadingOpt(false));
+  }, []);
+
+  async function selectOptician(opt) {
+    setSelOpt(opt); setSelClient(null); setSearch('');
+    setLoadingCli(true); setClients([]);
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'orders'),
+        where('optician_id', '==', opt.uid),
+        orderBy('timestamp', 'desc')
+      ));
+      const orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Deduplica per nome+telefono — tiene l'ordine più recente per ogni cliente
+      const map = {};
+      orders.forEach(o => {
+        const key = (o.patient_name || '') + '_' + (o.client_info?.phone || '');
+        if (!map[key]) map[key] = { orders: [], ...o };
+        map[key].orders = [...(map[key].orders || []), o];
+      });
+      setClients(Object.values(map).sort((a, b) => (a.patient_name || '').localeCompare(b.patient_name || '')));
+    } catch {
+      // Fallback senza orderBy
+      try {
+        const snap = await getDocs(query(collection(db, 'orders'), where('optician_id', '==', opt.uid)));
+        const orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        orders.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+        const map = {};
+        orders.forEach(o => {
+          const key = (o.patient_name || '') + '_' + (o.client_info?.phone || '');
+          if (!map[key]) map[key] = { ...o, orders: [] };
+          map[key].orders.push(o);
+        });
+        setClients(Object.values(map).sort((a, b) => (a.patient_name || '').localeCompare(b.patient_name || '')));
+      } catch { /* no data */ }
+    }
+    setLoadingCli(false);
+  }
+
+  const filtered = clients.filter(c =>
+    !search || (c.patient_name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (c.client_info?.phone || '').includes(search) ||
+    (c.client_info?.email || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const EyeRow = ({ label, eye, color }) => eye?.type ? (
+    <div className="flex items-start gap-2 text-xs">
+      <span className={`font-bold w-8 flex-shrink-0 ${color}`}>{label}</span>
+      <span className="text-gray-700">
+        {eye.type}
+        {eye.pwr  && <span className="ml-1 text-gray-500">Sf.{eye.pwr}</span>}
+        {eye.cyl  && <span className="ml-1 text-gray-500">Cil.{eye.cyl}</span>}
+        {eye.axis && <span className="ml-1 text-gray-500">Ax.{eye.axis}</span>}
+        {eye.add  && <span className="ml-1 text-gray-500">ADD {eye.add}</span>}
+      </span>
+    </div>
+  ) : null;
+
+  return (
+    <div className="max-w-7xl mx-auto p-6 flex gap-5 h-[calc(100vh-56px)] overflow-hidden">
+
+      {/* Colonna ottici */}
+      <div className="w-56 flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+        <div className="p-3 border-b border-gray-100 bg-gray-50 text-xs font-bold text-gray-600 uppercase tracking-wide">
+          Ottici ({opticians.length})
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {loadingOpt
+            ? <p className="text-xs text-gray-400 text-center p-4">Caricamento...</p>
+            : opticians.map(opt => (
+              <button key={opt.uid} onClick={() => selectOptician(opt)}
+                className={`w-full text-left px-3 py-2.5 border-b border-gray-50 text-sm transition ${selOpt?.uid === opt.uid ? 'bg-indigo-50 text-indigo-700 font-semibold border-l-4 border-l-indigo-500' : 'text-gray-700 hover:bg-gray-50'}`}>
+                <p className="truncate">{opt.ragioneSociale || opt.email}</p>
+                {opt.ragioneSociale && <p className="text-xs text-gray-400 truncate">{opt.email}</p>}
+              </button>
+            ))
+          }
+        </div>
+      </div>
+
+      {/* Colonna clienti */}
+      <div className="w-72 flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+        <div className="p-3 border-b border-gray-100 bg-gray-50">
+          <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">
+            Clienti {selOpt ? `— ${selOpt.ragioneSociale || selOpt.email}` : ''}
+            {!loadingCli && clients.length > 0 && <span className="ml-1 text-indigo-600">({clients.length})</span>}
+          </p>
+          {selOpt && (
+            <input type="text" placeholder="Cerca per nome, tel, email..." value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-indigo-500 focus:border-indigo-500" />
+          )}
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {!selOpt
+            ? <p className="text-xs text-gray-400 text-center p-6">Seleziona un ottico.</p>
+            : loadingCli
+              ? <p className="text-xs text-gray-400 text-center p-6">Caricamento...</p>
+              : filtered.length === 0
+                ? <p className="text-xs text-gray-400 text-center p-6">{search ? 'Nessun risultato.' : 'Nessun cliente.'}</p>
+                : filtered.map((c, i) => {
+                  const l = c.lens_order || {};
+                  return (
+                    <button key={i} onClick={() => setSelClient(c)}
+                      className={`w-full text-left px-3 py-3 border-b border-gray-50 transition ${selClient === c ? 'bg-indigo-50 border-l-4 border-l-indigo-500' : 'hover:bg-gray-50'}`}>
+                      <p className={`text-sm font-semibold truncate ${selClient === c ? 'text-indigo-700' : 'text-gray-800'}`}>{c.patient_name || '—'}</p>
+                      <p className="text-xs text-gray-500 truncate">{l.manufacturer} {l.model}</p>
+                      {c.client_info?.phone && <p className="text-xs text-gray-400">{c.client_info.phone}</p>}
+                      <p className="text-xs text-gray-300 mt-0.5">{c.orders?.length || 1} ordine/i</p>
+                    </button>
+                  );
+                })
+          }
+        </div>
+      </div>
+
+      {/* Dettaglio cliente */}
+      <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+        {!selClient ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-gray-400 text-sm">Seleziona un cliente.</p>
+          </div>
+        ) : (() => {
+          const c   = selClient;
+          const l   = c.lens_order || {};
+          const ci  = c.client_info || {};
+          const del = c.delivery || {};
+          const lastOrder = c.timestamp?.seconds
+            ? new Date(c.timestamp.seconds * 1000).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
+            : '—';
+          return (
+            <>
+              <div className="p-4 border-b border-gray-100 bg-gray-50">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">{c.patient_name}</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Ultimo ordine: {lastOrder} · {c.orders?.length || 1} ordine/i totali</p>
+                  </div>
+                  {ci.privacy_accepted && (
+                    <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-2 py-1 rounded-full font-bold">✓ Privacy accettata</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="overflow-y-auto flex-1 p-4 space-y-4">
+
+                {/* Dati personali */}
+                <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+                  <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Dati Personali</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    {[['Telefono', ci.phone], ['Email', ci.email], ['Cod. Fiscale', ci.cf]].map(([k, v]) => v ? (
+                      <div key={k}><p className="text-xs text-gray-400">{k}</p><p className="font-medium text-gray-800">{v}</p></div>
+                    ) : null)}
+                  </div>
+                  {del.address_full && del.mode === 'delivery' && (
+                    <div className="mt-3"><p className="text-xs text-gray-400">Indirizzo consegna</p><p className="text-sm font-medium text-gray-800">{del.address_full}</p></div>
+                  )}
+                </div>
+
+                {/* Prescrizione lenti */}
+                <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+                  <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Prescrizione Lenti</h4>
+                  <p className="text-sm font-bold text-gray-800 mb-2">{l.manufacturer} {l.model}</p>
+                  <div className="space-y-1.5">
+                    <EyeRow label="OD" eye={l.od} color="text-blue-600" />
+                    <EyeRow label="OS" eye={l.os} color="text-green-600" />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">Quantità: OD {l.od?.qty || 1} pz. · OS {l.os?.qty || 1} pz.</p>
+                </div>
+
+                {/* Storico ordini */}
+                {c.orders?.length > 1 && (
+                  <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+                    <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Storico Ordini ({c.orders.length})</h4>
+                    <div className="space-y-2">
+                      {c.orders.map((o, i) => {
+                        const date = o.timestamp?.seconds
+                          ? new Date(o.timestamp.seconds * 1000).toLocaleDateString('it-IT', { day: 'numeric', month: 'numeric', year: 'numeric' })
+                          : '—';
+                        const sl = o.lens_order || {};
+                        const STATUS = { new: 'Nuovo', processing: 'In Lav.', ready: 'Pronto', completed: 'Consegnato', cancelled: 'Annullato' };
+                        return (
+                          <div key={i} className="flex justify-between items-center text-xs bg-white border border-gray-100 rounded-lg px-3 py-2">
+                            <span className="text-gray-600">{date}</span>
+                            <span className="text-gray-700">{sl.manufacturer} {sl.model}</span>
+                            <span className="font-semibold text-gray-800">{STATUS[o.status] || o.status}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          );
+        })()}
+      </div>
     </div>
   );
 }
@@ -943,6 +1175,7 @@ function SuperAdminPanel({ user }) {
   const TABS = [
     { id: 'catalog',   label: 'Catalogo Master' },
     { id: 'ottici',    label: 'Gestione Ottici' },
+    { id: 'clienti',   label: 'Clienti' },
     { id: 'forniture', label: 'Forniture' },
   ];
 
@@ -988,6 +1221,7 @@ function SuperAdminPanel({ user }) {
 
       {activeTab === 'catalog' && <CatalogoTab catalog={catalog} setCatalog={setCatalog} saving={saving} setSaving={setSaving} />}
       {activeTab === 'ottici'    && <OtticiTab catalog={catalog} />}
+      {activeTab === 'clienti'   && <ClientiTab />}
       {activeTab === 'forniture' && <FornitureTab />}
 
       {/* Modal cambio password dashboard */}
