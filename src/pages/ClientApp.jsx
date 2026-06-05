@@ -466,22 +466,34 @@ export default function ClientApp() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Produttore</label>
-              <select value={manufacturer} disabled={lensLocked || !lensData}
-                onChange={e => { setManufacturer(e.target.value); setModel(''); setOd(o => ({ ...o, type: '' })); setOs(o => ({ ...o, type: '' })); }}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 disabled:cursor-not-allowed">
-                <option value="">-- Seleziona Produttore --</option>
-                {lensData && Object.keys(lensData).map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+              {lensLocked ? (
+                <div className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-700 text-sm min-h-[42px]">
+                  {manufacturer || <span className="text-gray-400 italic">Non specificato</span>}
+                </div>
+              ) : (
+                <select value={manufacturer} disabled={!lensData}
+                  onChange={e => { setManufacturer(e.target.value); setModel(''); setOd(o => ({ ...o, type: '' })); setOs(o => ({ ...o, type: '' })); }}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white disabled:cursor-not-allowed">
+                  <option value="">-- Seleziona Produttore --</option>
+                  {lensData && Object.keys(lensData).map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              )}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Modello Lente</label>
-              <select value={model} disabled={lensLocked || !manufacturer}
-                onChange={e => { setModel(e.target.value); setOd(o => ({ ...o, type: '' })); setOs(o => ({ ...o, type: '' })); }}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 disabled:cursor-not-allowed">
-                <option value="">-- Seleziona Modello --</option>
-                {models.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+              {lensLocked ? (
+                <div className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-700 text-sm min-h-[42px]">
+                  {model || <span className="text-gray-400 italic">Non specificato</span>}
+                </div>
+              ) : (
+                <select value={model} disabled={!manufacturer}
+                  onChange={e => { setModel(e.target.value); setOd(o => ({ ...o, type: '' })); setOs(o => ({ ...o, type: '' })); }}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white disabled:cursor-not-allowed">
+                  <option value="">-- Seleziona Modello --</option>
+                  {models.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              )}
             </div>
 
             <EyeConfig eye="od" label="OCCHIO DESTRO"  types={types} values={od} locked={lensLocked} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
