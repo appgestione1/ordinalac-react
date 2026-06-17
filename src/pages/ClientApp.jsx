@@ -166,11 +166,20 @@ export default function ClientApp() {
   }
 
   useEffect(() => {
-    signInAnonymously(auth).catch(console.error);
-    init();
-    const savedReqId = ls('changeReqId');
-    if (savedReqId) { setChangeReqPending(true); listenChangeReq(savedReqId); }
-    return () => { if (changeReqUnsub.current) changeReqUnsub.current(); };
+    let mounted = true;
+    async function setup() {
+      try { await signInAnonymously(auth); } catch (e) { console.error(e); }
+      if (!mounted) return;
+      await init();
+      if (!mounted) return;
+      const savedReqId = ls('changeReqId');
+      if (savedReqId) { setChangeReqPending(true); listenChangeReq(savedReqId); }
+    }
+    setup();
+    return () => {
+      mounted = false;
+      if (changeReqUnsub.current) changeReqUnsub.current();
+    };
   }, []);
 
   // ── Init ────────────────────────────────────────────────────────────

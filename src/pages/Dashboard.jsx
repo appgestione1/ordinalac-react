@@ -265,7 +265,12 @@ function DashboardPanel({ user }) {
   }, [user.uid]);
 
   async function handleStatusChange(orderId, newStatus) {
-    await updateDoc(doc(db, 'orders', orderId), { status: newStatus });
+    try {
+      await updateDoc(doc(db, 'orders', orderId), { status: newStatus });
+    } catch {
+      alert('Errore nel salvataggio dello stato. Riprova.');
+      return;
+    }
     if (newStatus !== 'ready' && newStatus !== 'processing') return;
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
@@ -280,7 +285,11 @@ function DashboardPanel({ user }) {
 
   async function handleDelete(id) {
     if (!confirm('Eliminare questo ordine?')) return;
-    await deleteDoc(doc(db, 'orders', id));
+    try {
+      await deleteDoc(doc(db, 'orders', id));
+    } catch {
+      alert('Errore durante l\'eliminazione. Riprova.');
+    }
   }
 
   async function handleSupply(orderId, destination) {
