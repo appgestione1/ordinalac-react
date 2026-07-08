@@ -94,6 +94,10 @@ firebase deploy --only firestore:rules            # aggiorna regole Firestore
 - Navbar Dashboard: h1 "Dashboard" → "OrdinaLac" (**l'easter egg 7 tap ora è sul testo "OrdinaLac"**)
 - Register: subtitle cita OrdinaLac
 
+## Catalogo master (08/07/2026)
+
+Popolato con i prodotti di https://www.visionottica.it/collections/lenti-a-contatto (via `products.json` Shopify): 17 produttori/brand, 35 modelli, 58 tipi. Convenzione tipi: "Frequenza + Tipologia" (es. "Giornaliera Torica") — le parole **torica/multifocale** attivano i campi CYL/AXIS/ADD in Dashboard e ClientApp (match case-insensitive su `toric`/`multifocal`). Rimossi i vecchi produttori di prova per casa madre (Alcon, J&J, Bausch + Lomb, CooperVision, pippo) — scelta utente: persi Acuvue Vita, MyDay, Biofinity XR. Eventuali listini ottici (`optician_config`) che citavano le vecchie voci vanno riabilitati dal SuperAdmin. Import fatto con script Node temporaneo (account usa-e-getta creato e cancellato, regole permettono write a ogni auth non anonimo).
+
 ## TODO aperti
 
 1. **Integrazione VisionConsole** (nuovaconsole): collegare OrdinaLac alla console gestionale come modulo Contattologia — l'ottico VisionOttica deve poter generare QR e vedere gli ordini dalla console. Nel video presentazione v4 è annunciato come teaser "Push&Go — L'ordine delle lenti a contatto, con un click".
