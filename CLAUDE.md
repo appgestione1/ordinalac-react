@@ -103,3 +103,8 @@ Popolato con i prodotti di https://www.visionottica.it/collections/lenti-a-conta
 1. **Integrazione VisionConsole** (nuovaconsole): collegare OrdinaLac alla console gestionale come modulo Contattologia — l'ottico VisionOttica deve poter generare QR e vedere gli ordini dalla console. Nel video presentazione v4 è annunciato come teaser "Push&Go — L'ordine delle lenti a contatto, con un click".
 2. Pagamenti digitali (tab "Pagamento" nella ClientApp è ancora placeholder "disponibile a breve")
 3. Valutare rebranding completo in "Push&Go" (nome usato nel teaser del video)
+4. **Logo con sfondo verde scuro**: `icon.png` (e quindi favicon/icone PWA/logo login) ha uno sfondo verde squadrato non trasparente — rigenerare l'immagine con sfondo trasparente o bianco
+
+## Verifica UI in locale (08/07/2026)
+
+Tutte le sezioni verificate su dev server con screenshot Playwright (playwright preso da `Desktop/nuovaconsole/node_modules`, viewport mobile 390×844 per ClientApp): `/` no-qr ok, `/?dev=1` settings ok, `/?dev=action` action ok con catalogo e pulsante rosso, `/dashboard` login con nuovo brand ok, `/register` ok, `/superadmin` ok. Unico neo estetico: sfondo verde del logo (TODO 4).
