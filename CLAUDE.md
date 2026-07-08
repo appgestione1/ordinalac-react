@@ -86,6 +86,16 @@ firebase deploy --only firestore:rules            # aggiorna regole Firestore
 - **Dashboard.jsx handleStatusChange**: aggiunto try/catch con alert utente
 - **Dashboard.jsx handleDelete**: aggiunto try/catch con alert utente
 
+## Rifinitura lancio (08/07/2026)
+
+- `index.html`: lang="it", title/description/og "OrdinaLac", theme-color blu, link a `manifest.json` (prima mancava → PWA non installabile), favicon = occhio (`favicon.png` da `icon.png` via ffmpeg)
+- `manifest.json`: nome "OrdinaLac", icone locali `icon-192/512.png` (rimossa icona placehold.co e shortcut rotto `#invia-ordine`)
+- Login ottico: logo + brand "OrdinaLac / Portale Ottico"
+- Navbar Dashboard: h1 "Dashboard" → "OrdinaLac" (**l'easter egg 7 tap ora è sul testo "OrdinaLac"**)
+- Register: subtitle cita OrdinaLac
+
 ## TODO aperti
 
-_(nessuno al momento — aggiungere qui i prossimi task)_
+1. **Integrazione VisionConsole** (nuovaconsole): collegare OrdinaLac alla console gestionale come modulo Contattologia — l'ottico VisionOttica deve poter generare QR e vedere gli ordini dalla console. Nel video presentazione v4 è annunciato come teaser "Push&Go — L'ordine delle lenti a contatto, con un click".
+2. Pagamenti digitali (tab "Pagamento" nella ClientApp è ancora placeholder "disponibile a breve")
+3. Valutare rebranding completo in "Push&Go" (nome usato nel teaser del video)

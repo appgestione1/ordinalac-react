@@ -147,7 +147,9 @@ function LoginView() {
     <div className="min-h-screen flex items-center justify-center bg-white">
       <div className="max-w-sm w-full space-y-8 p-8">
         <div className="text-center">
-          <h2 className="text-3xl font-extrabold text-gray-900">Portale Ottico</h2>
+          <img src="/icon-192.png" alt="OrdinaLac" className="w-16 h-16 mx-auto mb-3" />
+          <h2 className="text-3xl font-extrabold text-gray-900">OrdinaLac</h2>
+          <p className="mt-1 text-sm font-medium text-blue-600">Portale Ottico</p>
           <p className="mt-2 text-sm text-gray-600">Accedi con le tue credenziali.</p>
         </div>
         <form onSubmit={handleLogin} className="space-y-3">
@@ -333,7 +335,7 @@ function DashboardPanel({ user }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
-              Dashboard
+              OrdinaLac
             </h1>
             <div className="hidden md:flex gap-6 h-full items-center">
               {['orders','config'].map(t => (
