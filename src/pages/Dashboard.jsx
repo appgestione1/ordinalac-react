@@ -8,6 +8,8 @@ import {
 } from 'firebase/firestore';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { auth, db } from '../firebase';
+import ParamField from '../components/ParamField';
+import { getRange, pwrOptions, cylOptions, axisOptions, addOptions } from '../lib/lensRanges';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 const APP_URL = window.location.origin;
@@ -48,14 +50,14 @@ function EyeParams({ eye }) {
 const EMPTY_EYE_FORM = { manufacturer: '', model: '', type: '', pwr: '', cyl: '', axis: '', add: '' };
 
 // ── Componente LensEyeForm (ottico compila prescrizione) ─────────────
-function LensEyeForm({ label, color, lensData, value, onChange }) {
-  const models = lensData && value.manufacturer ? Object.keys(lensData[value.manufacturer] || {}) : [];
+function LensEyeForm({ label, color, lensData, ranges, value, onChange }) {
   const types  = lensData && value.manufacturer && value.model ? lensData[value.manufacturer]?.[value.model] || [] : [];
   const t = (value.type || '').toLowerCase();
   const showPwr  = t && !t.includes('nessun');
   const showCyl  = t.includes('astigmatismo') || t.includes('toric') || t.includes('xr');
   const showAxis = showCyl;
   const showAdd  = t.includes('multifocal') || t.includes('presbiopia');
+  const range = getRange(ranges, value.manufacturer, value.model, value.type);
 
   const inputCls = "w-full text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-blue-500 focus:border-blue-500";
 
@@ -73,10 +75,10 @@ function LensEyeForm({ label, color, lensData, value, onChange }) {
         </select>
         {value.type && (
           <div className="grid grid-cols-2 gap-2">
-            {showPwr  && <div className="col-span-2"><input type="text" placeholder="PWR (Sfera)" value={value.pwr}  onChange={e => onChange({ pwr: e.target.value })} className={inputCls} /></div>}
-            {showCyl  && <input type="text" placeholder="CYL"  value={value.cyl}  onChange={e => onChange({ cyl: e.target.value })} className={inputCls} />}
-            {showAxis && <input type="text" placeholder="AXIS" value={value.axis} onChange={e => onChange({ axis: e.target.value })} className={inputCls} />}
-            {showAdd  && <div className="col-span-2"><input type="text" placeholder="ADD" value={value.add} onChange={e => onChange({ add: e.target.value })} className={inputCls} /></div>}
+            {showPwr  && <div className="col-span-2"><ParamField placeholder="PWR (Sfera)" value={value.pwr} options={pwrOptions(range)} onChange={v => onChange({ pwr: v })} className={inputCls} /></div>}
+            {showCyl  && <ParamField placeholder="CYL"  value={value.cyl}  options={cylOptions(range)}  onChange={v => onChange({ cyl: v })}  className={inputCls} />}
+            {showAxis && <ParamField placeholder="AXIS" value={value.axis} options={axisOptions(range)} onChange={v => onChange({ axis: v })} className={inputCls} />}
+            {showAdd  && <div className="col-span-2"><ParamField placeholder="ADD" value={value.add} options={addOptions(range)} onChange={v => onChange({ add: v })} className={inputCls} /></div>}
           </div>
         )}
       </div>
@@ -147,8 +149,8 @@ function LoginView() {
     <div className="min-h-screen flex items-center justify-center bg-white">
       <div className="max-w-sm w-full space-y-8 p-8">
         <div className="text-center">
-          <img src="/icon-192.png" alt="OrdinaLac" className="w-16 h-16 mx-auto mb-3" />
-          <h2 className="text-3xl font-extrabold text-gray-900">OrdinaLac</h2>
+          <img src="/icon-192.png" alt="Push&Go" className="w-16 h-16 mx-auto mb-3" />
+          <h2 className="text-3xl font-extrabold text-gray-900">Push&Go</h2>
           <p className="mt-1 text-sm font-medium text-blue-600">Portale Ottico</p>
           <p className="mt-2 text-sm text-gray-600">Accedi con le tue credenziali.</p>
         </div>
@@ -182,6 +184,7 @@ function DashboardPanel({ user }) {
   const [orders, setOrders]   = useState([]);
   const [requests, setRequests] = useState([]);
   const [masterCatalog, setMasterCatalog] = useState({});
+  const [masterRanges, setMasterRanges] = useState({});
   const [myLensData, setMyLensData]       = useState({});
   const [myPricingConfig, setMyPricingConfig] = useState({});
   const [search, setSearch]   = useState('');
@@ -257,7 +260,12 @@ function DashboardPanel({ user }) {
 
   // Carica catalogo master + config ottico
   useEffect(() => {
-    getDoc(doc(db, 'catalogs', 'master')).then(s => { if (s.exists()) setMasterCatalog(s.data().data || {}); });
+    getDoc(doc(db, 'catalogs', 'master')).then(s => {
+      if (s.exists()) {
+        setMasterCatalog(s.data().data || {});
+        setMasterRanges(s.data().ranges || {});
+      }
+    });
     getDoc(doc(db, 'optician_config', user.uid, 'lenses', 'main')).then(s => {
       if (s.exists()) {
         setMyLensData(s.data().data || {});
@@ -335,7 +343,7 @@ function DashboardPanel({ user }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
-              OrdinaLac
+              Push&Go
             </h1>
             <div className="hidden md:flex gap-6 h-full items-center">
               {['orders','config'].map(t => (
@@ -465,7 +473,7 @@ function DashboardPanel({ user }) {
 
       {/* ── MODALI ── */}
       {showClientModal && (
-        <ClientModal uid={user.uid} myLensData={myLensData} onClose={() => setShowClientModal(false)} />
+        <ClientModal uid={user.uid} myLensData={myLensData} ranges={masterRanges} onClose={() => setShowClientModal(false)} />
       )}
       {showPwdModal && (
         <PasswordModal onClose={() => setShowPwdModal(false)} />
@@ -477,7 +485,7 @@ function DashboardPanel({ user }) {
         <NotificationModal data={notifData} onSend={sendNotification} onClose={() => setNotifData(null)} />
       )}
       {pendingRequest && (
-        <RequestModal req={pendingRequest} myLensData={myLensData} onClose={() => setPendingRequest(null)} />
+        <RequestModal req={pendingRequest} myLensData={myLensData} ranges={masterRanges} onClose={() => setPendingRequest(null)} />
       )}
 
       {showAdminModal && (
@@ -607,7 +615,7 @@ function printOrder(order) {
 }
 
 // ── Modale Nuovo Cliente + QR ─────────────────────────────────────────
-function ClientModal({ uid, myLensData, onClose }) {
+function ClientModal({ uid, myLensData, ranges, onClose }) {
   const [step, setStep]   = useState('form'); // 'form' | 'qr'
   const [qrUrl, setQrUrl] = useState('');
   const [form, setForm]   = useState({ name:'', cf:'', email:'', phone:'', street:'', city:'', cap:'', prov:'' });
@@ -735,8 +743,8 @@ function ClientModal({ uid, myLensData, onClose }) {
                   </div>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <LensEyeForm label="OCCHIO DESTRO (OD)" color="blue"  lensData={myLensData} value={{ ...od, manufacturer: lensManuf, model: lensModel }} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
-                  <LensEyeForm label="OCCHIO SINISTRO (OS)" color="green" lensData={myLensData} value={{ ...os, manufacturer: lensManuf, model: lensModel }} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
+                  <LensEyeForm label="OCCHIO DESTRO (OD)" color="blue"  lensData={myLensData} ranges={ranges} value={{ ...od, manufacturer: lensManuf, model: lensModel }} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
+                  <LensEyeForm label="OCCHIO SINISTRO (OS)" color="green" lensData={myLensData} ranges={ranges} value={{ ...os, manufacturer: lensManuf, model: lensModel }} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
                 </div>
               </div>
             </div>
@@ -946,7 +954,7 @@ function PasswordModal({ onClose }) {
 }
 
 // ── Modal Richiesta Modifica ──────────────────────────────────────────
-function RequestModal({ req, myLensData, onClose }) {
+function RequestModal({ req, myLensData, ranges, onClose }) {
   const cur = req.current_data || {};
   const [manuf, setManuf] = useState(cur.manufacturer || '');
   const [model, setModel] = useState(cur.model || '');
@@ -954,7 +962,6 @@ function RequestModal({ req, myLensData, onClose }) {
   const [os, setOs] = useState({ type: cur.os?.type||'', pwr: cur.os?.pwr||'', cyl: cur.os?.cyl||'', axis: cur.os?.axis||'', add: cur.os?.add||'' });
 
   const models = myLensData && manuf ? Object.keys(myLensData[manuf] || {}) : [];
-  const types  = myLensData && manuf && model ? myLensData[manuf]?.[model] || [] : [];
 
   const inputCls = "w-full border rounded p-1 text-sm";
 
@@ -1030,21 +1037,9 @@ function RequestModal({ req, myLensData, onClose }) {
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-6">
-          {[['OD','bg-blue-50 border-blue-100',od,setOd],['OS','bg-green-50 border-green-100',os,setOs]].map(([label,cls,val,set]) => (
-            <div key={label} className={`${cls} p-3 rounded border`}>
-              <div className={`font-bold ${label==='OD'?'text-blue-800':'text-green-800'} text-xs mb-2`}>OCCHIO {label==='OD'?'DESTRO':'SINISTRO'}</div>
-              <select value={val.type} disabled={!model} onChange={e => set(v => ({ ...v, type: e.target.value }))} className={`${inputCls} mb-2`}>
-                <option value="">-- Tipo --</option>
-                {types.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <div className="grid grid-cols-2 gap-2">
-                {[['pwr','PWR'],['cyl','CYL'],['axis','AXIS'],['add','ADD']].map(([k,ph]) => (
-                  <input key={k} type="text" placeholder={ph} value={val[k]} onChange={e => set(v => ({ ...v, [k]: e.target.value }))} className={inputCls} />
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-6 pt-3">
+          <LensEyeForm label="OCCHIO DESTRO (OD)" color="blue"  lensData={myLensData} ranges={ranges} value={{ ...od, manufacturer: manuf, model }} onChange={vals => setOd(v => ({ ...v, ...vals }))} />
+          <LensEyeForm label="OCCHIO SINISTRO (OS)" color="green" lensData={myLensData} ranges={ranges} value={{ ...os, manufacturer: manuf, model }} onChange={vals => setOs(v => ({ ...v, ...vals }))} />
         </div>
         <div className="mt-6 flex justify-end gap-3">
           <button onClick={onClose} className="bg-gray-100 text-gray-700 px-4 py-2 rounded font-bold">Annulla</button>

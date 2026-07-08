@@ -83,7 +83,7 @@ export default function Register() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Registrazione Ottico</h1>
-          <p className="text-sm text-gray-500 mt-1">Crea il tuo account per accedere al portale ordini OrdinaLac</p>
+          <p className="text-sm text-gray-500 mt-1">Crea il tuo account per accedere al portale ordini Push&Go</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">

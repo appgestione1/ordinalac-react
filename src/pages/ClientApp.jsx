@@ -3,6 +3,7 @@ import { signInAnonymously } from 'firebase/auth';
 import { doc, getDoc, setDoc, addDoc, onSnapshot, collection, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import EyeConfig from '../components/EyeConfig';
+import { getRange } from '../lib/lensRanges';
 
 // ── localStorage keys ────────────────────────────────────────────────
 const LS = {
@@ -53,6 +54,7 @@ export default function ClientApp() {
   const [view, setView] = useState('loading'); // 'loading' | 'no-qr' | 'settings' | 'action'
   const [activeTab, setActiveTab] = useState('patient');
   const [lensData, setLensData] = useState(null);
+  const [masterRanges, setMasterRanges] = useState(null);
   const [opticianId, setOpticianId] = useState('');
   const [lensLocked, setLensLocked] = useState(true);
   const unlockTaps = useRef(0);
@@ -91,6 +93,11 @@ export default function ClientApp() {
 
   const models = lensData && manufacturer ? Object.keys(lensData[manufacturer] || {}) : [];
   const types  = lensData && manufacturer && model ? lensData[manufacturer]?.[model] || [] : [];
+  const rangesByType = {};
+  if (masterRanges) for (const t of types) {
+    const r = getRange(masterRanges, manufacturer, model, t);
+    if (r) rangesByType[t] = r;
+  }
 
   function listenChangeReq(reqId) {
     if (changeReqUnsub.current) changeReqUnsub.current();
@@ -187,20 +194,30 @@ export default function ClientApp() {
     const params = new URLSearchParams(window.location.search);
 
     // Modalità sviluppo: /?dev=1 (settings) | /?dev=action
+    const DEV_LENSDATA = {
+      'DAILIES': { 'DAILIES TOTAL1': ['Giornaliera Sferica', 'Giornaliera Torica', 'Giornaliera Multifocale'] },
+      'ACUVUE': { 'ACUVUE OASYS MAX 1-Day': ['Giornaliera Sferica', 'Giornaliera Torica', 'Giornaliera Multifocale'] },
+    };
     if (params.get('dev') === '1') {
       setName('Mario Rossi'); setPhone('3331234567');
       setEmail('mario@test.it'); setCf('RSSMRO80A01H501A');
-      setOd({ qty: '1', type: 'Standard', pwr: '-2.50', cyl: '', axis: '', add: '' });
-      setOs({ qty: '1', type: 'Standard', pwr: '-1.75', cyl: '', axis: '', add: '' });
+      setLensData(DEV_LENSDATA);
+      setManufacturer('DAILIES'); setModel('DAILIES TOTAL1');
+      setOd({ qty: '1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
+      setOs({ qty: '1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
+      getDoc(doc(db, 'catalogs', 'master'))
+        .then(s => { if (s.exists()) setMasterRanges(s.data().ranges || {}); })
+        .catch(() => {});
       setLensLocked(false);
       setView('settings');
       return;
     }
     if (params.get('dev') === 'action') {
       setName('Mario Rossi'); setPhone('3331234567');
-      setOd({ qty: '1', type: 'Standard', pwr: '-2.50', cyl: '', axis: '', add: '' });
-      setOs({ qty: '1', type: 'Standard', pwr: '-1.75', cyl: '', axis: '', add: '' });
-      setManufacturer('Acuvue'); setModel('Oasys');
+      setLensData(DEV_LENSDATA);
+      setOd({ qty: '1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
+      setOs({ qty: '1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
+      setManufacturer('DAILIES'); setModel('DAILIES TOTAL1');
       setDelivery('pickup');
       setView('action');
       return;
@@ -286,6 +303,10 @@ export default function ClientApp() {
   // ── Fetch catalogo lenti ────────────────────────────────────────────
   async function fetchLensData(oid) {
     if (!oid) return null;
+    // Range di produzione dal catalogo master (per vincolare i select diottrie)
+    getDoc(doc(db, 'catalogs', 'master'))
+      .then(s => { if (s.exists()) setMasterRanges(s.data().ranges || {}); })
+      .catch(() => {});
     try {
       const snap = await getDoc(doc(db, 'optician_config', oid, 'lenses', 'main'));
       if (snap.exists()) { setLensData(snap.data().data); return snap.data().data; }
@@ -574,8 +595,8 @@ export default function ClientApp() {
               )}
             </div>
 
-            <EyeConfig eye="od" label="OCCHIO DESTRO"  types={types} values={od} locked={lensLocked} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
-            <EyeConfig eye="os" label="OCCHIO SINISTRO" types={types} values={os} locked={lensLocked} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
+            <EyeConfig eye="od" label="OCCHIO DESTRO"  types={types} values={od} locked={lensLocked} rangesByType={rangesByType} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
+            <EyeConfig eye="os" label="OCCHIO SINISTRO" types={types} values={os} locked={lensLocked} rangesByType={rangesByType} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
           </div>
         )}
 

@@ -1,13 +1,16 @@
-export default function EyeConfig({ eye, label, types, values, onChange, locked }) {
+import ParamField from './ParamField';
+import { pwrOptions, cylOptions, axisOptions, addOptions } from '../lib/lensRanges';
+
+export default function EyeConfig({ eye, label, types, values, onChange, locked, rangesByType }) {
   const { qty, type, pwr, cyl, axis, add } = values;
   const t = type.toLowerCase();
 
-  const showPwr = t.includes('standard') || t.includes('astigmatismo') || t.includes('toric') ||
-    t.includes('multifocal') || t.includes('presbiopia') || t.includes('xr');
+  const showPwr = !!type && !t.includes('nessun');
   const showCyl = t.includes('astigmatismo') || t.includes('toric') || t.includes('xr');
   const showAxis = showCyl;
   const showAdd = t.includes('multifocal') || t.includes('presbiopia');
   const noParams = type && !showPwr && !showCyl && !showAxis && !showAdd;
+  const range = rangesByType?.[type] || null;
 
   const inputCls = locked
     ? 'mt-1 block w-full px-3 py-1 border border-gray-300 rounded-md bg-gray-50 text-gray-500 cursor-not-allowed'
@@ -46,33 +49,29 @@ export default function EyeConfig({ eye, label, types, values, onChange, locked 
           {showPwr && (
             <div>
               <label className="block text-xs font-medium text-gray-500">Potere (Diottria)</label>
-              <input type="text" value={pwr} readOnly={locked}
-                onChange={e => onChange({ pwr: e.target.value })}
-                className={inputCls} />
+              <ParamField value={pwr} options={pwrOptions(range)} locked={locked}
+                onChange={v => onChange({ pwr: v })} className={inputCls} />
             </div>
           )}
           {showCyl && (
             <div>
               <label className="block text-xs font-medium text-gray-500">Cilindro (CYL)</label>
-              <input type="text" value={cyl} readOnly={locked}
-                onChange={e => onChange({ cyl: e.target.value })}
-                className={inputCls} />
+              <ParamField value={cyl} options={cylOptions(range)} locked={locked}
+                onChange={v => onChange({ cyl: v })} className={inputCls} />
             </div>
           )}
           {showAxis && (
             <div>
               <label className="block text-xs font-medium text-gray-500">Asse (AXIS)</label>
-              <input type="text" value={axis} readOnly={locked}
-                onChange={e => onChange({ axis: e.target.value })}
-                className={inputCls} />
+              <ParamField value={axis} options={axisOptions(range)} locked={locked}
+                onChange={v => onChange({ axis: v })} className={inputCls} />
             </div>
           )}
           {showAdd && (
             <div>
               <label className="block text-xs font-medium text-gray-500">Addizione (ADD)</label>
-              <input type="text" value={add} readOnly={locked}
-                onChange={e => onChange({ add: e.target.value })}
-                className={inputCls} />
+              <ParamField value={add} options={addOptions(range)} locked={locked}
+                onChange={v => onChange({ add: v })} className={inputCls} />
             </div>
           )}
         </div>

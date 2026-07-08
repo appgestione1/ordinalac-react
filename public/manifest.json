@@ -1,7 +1,7 @@
 {
-  "name": "OrdinaLac — Ordina le tue lenti",
-  "short_name": "OrdinaLac",
-  "description": "Ordina le tue lenti a contatto con un tap.",
+  "name": "Push&Go — Ordina le tue lenti",
+  "short_name": "Push&Go",
+  "description": "L'ordine delle lenti a contatto, con un click.",
   "lang": "it",
   "start_url": "/",
   "display": "standalone",
