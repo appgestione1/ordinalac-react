@@ -1270,6 +1270,7 @@ function RangeEditorModal({ rkey, range, saving, onSave, onClose }) {
     pwrMax:  num(range?.pwr?.max),
     cylMin:  num(range?.cyl?.min),
     cylMax:  num(range?.cyl?.max),
+    cylStep: num(range?.cyl?.step),
     axisMin: num(range?.axis?.min),
     axisMax: num(range?.axis?.max),
     addMode: addInit?.values ? 'values' : (addInit ? 'range' : 'none'),
@@ -1285,7 +1286,10 @@ function RangeEditorModal({ rkey, range, saving, onSave, onClose }) {
     const r = {};
     const n = v => Number(String(v).replace(',', '.'));
     if (f.pwrMin !== '' && f.pwrMax !== '') r.pwr = { min: n(f.pwrMin), max: n(f.pwrMax) };
-    if (f.cylMin !== '' && f.cylMax !== '') r.cyl = { min: n(f.cylMin), max: n(f.cylMax) };
+    if (f.cylMin !== '' && f.cylMax !== '') {
+      r.cyl = { min: n(f.cylMin), max: n(f.cylMax) };
+      if (f.cylStep !== '' && n(f.cylStep) > 0) r.cyl.step = n(f.cylStep);
+    }
     if (f.axisMin !== '' && f.axisMax !== '') r.axis = { min: n(f.axisMin), max: n(f.axisMax) };
     if (f.addMode === 'range' && f.addMin !== '' && f.addMax !== '') r.add = { min: n(f.addMin), max: n(f.addMax) };
     if (f.addMode === 'values') {
@@ -1332,9 +1336,10 @@ function RangeEditorModal({ rkey, range, saving, onSave, onClose }) {
           {/* Cilindro + Asse */}
           <div className="mb-4">
             <p className="text-xs font-bold text-gray-700 mb-2">Cilindro (CYL) &amp; Asse — solo toriche</p>
-            <div className="grid grid-cols-2 gap-3 mb-2">
+            <div className="grid grid-cols-3 gap-3 mb-2">
               {fld('CYL min (es. -2.25)', 'cylMin', '-2.25')}
               {fld('CYL max (es. -0.75)', 'cylMax', '-0.75')}
+              {fld('Step (vuoto = 0.50)', 'cylStep', '0.50')}
             </div>
             <div className="grid grid-cols-2 gap-3">
               {fld('Asse min (es. 10)', 'axisMin', '10')}

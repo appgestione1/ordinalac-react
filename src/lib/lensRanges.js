@@ -22,12 +22,13 @@ export function pwrOptions(range) {
   return out;
 }
 
-// Cilindro: passi 0.50 (es. -2.25 / -1.75 / -1.25 / -0.75)
+// Cilindro: passo configurabile dal range (default 0.50, es. -2.25 / -1.75 / -1.25 / -0.75)
 export function cylOptions(range) {
   const r = range?.cyl;
   if (!r || r.min == null || r.max == null) return null;
+  const step = r.step > 0 ? r.step : 0.5;
   const out = [];
-  for (let v = r.min; v <= r.max + 1e-6; v += 0.5) out.push(signed(quarter(v)));
+  for (let v = r.min; v <= r.max + 1e-6; v += step) out.push(signed(quarter(v)));
   return out;
 }
 
