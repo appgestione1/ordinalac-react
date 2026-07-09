@@ -1006,19 +1006,25 @@ function ClientiTab() {
 }
 
 // ── Catalogo Master (3 colonne) ───────────────────────────────────────
-function CatalogoTab({ catalog, setCatalog, saving, setSaving }) {
+function CatalogoTab({ catalog, setCatalog, ranges, setRanges, saving, setSaving }) {
   const [saveMsg, setSaveMsg]   = useState('');
   const [newManuf, setNewManuf] = useState('');
   const [selManuf, setSelManuf] = useState('');
   const [newModel, setNewModel] = useState('');
   const [selModel, setSelModel] = useState('');
   const [newType, setNewType]   = useState('');
+  const [editRangeKey, setEditRangeKey] = useState(null); // "manuf::model::type" del range in modifica
 
-  async function saveCatalog(next) {
+  const rangeKey = (manuf, model, type) => `${manuf}::${model}::${type}`;
+
+  // Salva sempre catalogo + ranges insieme: il doc master viene riscritto
+  // per intero, quindi i range non vanno persi quando si edita il catalogo.
+  async function saveMaster(nextCatalog = catalog, nextRanges = ranges) {
     setSaving(true); setSaveMsg('');
     try {
-      await setDoc(doc(db, 'catalogs', 'master'), { data: next });
-      setCatalog(next);
+      await setDoc(doc(db, 'catalogs', 'master'), { data: nextCatalog, ranges: nextRanges });
+      setCatalog(nextCatalog);
+      setRanges(nextRanges);
       setSaveMsg('Salvato!');
       setTimeout(() => setSaveMsg(''), 2000);
     } catch {
@@ -1031,39 +1037,48 @@ function CatalogoTab({ catalog, setCatalog, saving, setSaving }) {
   function addManuf() {
     const m = newManuf.trim();
     if (!m || catalog[m]) return;
-    saveCatalog({ ...catalog, [m]: {} });
+    saveMaster({ ...catalog, [m]: {} });
     setNewManuf('');
   }
   function removeManuf(m) {
     if (!confirm(`Eliminare "${m}" e tutti i suoi modelli?`)) return;
     const next = { ...catalog }; delete next[m];
+    // ripulisci i range dei tipi sotto questo produttore
+    const nextRanges = { ...ranges };
+    Object.keys(nextRanges).forEach(k => { if (k.startsWith(`${m}::`)) delete nextRanges[k]; });
     if (selManuf === m) { setSelManuf(''); setSelModel(''); }
-    saveCatalog(next);
+    saveMaster(next, nextRanges);
   }
   function addModel() {
     const mo = newModel.trim();
     if (!mo || !selManuf || catalog[selManuf]?.[mo]) return;
-    saveCatalog({ ...catalog, [selManuf]: { ...catalog[selManuf], [mo]: [] } });
+    saveMaster({ ...catalog, [selManuf]: { ...catalog[selManuf], [mo]: [] } });
     setNewModel('');
   }
   function removeModel(manuf, model) {
     if (!confirm(`Eliminare "${model}"?`)) return;
     const next = { ...catalog, [manuf]: { ...catalog[manuf] } };
     delete next[manuf][model];
+    const nextRanges = { ...ranges };
+    Object.keys(nextRanges).forEach(k => { if (k.startsWith(`${manuf}::${model}::`)) delete nextRanges[k]; });
     if (selModel === model) setSelModel('');
-    saveCatalog(next);
+    saveMaster(next, nextRanges);
   }
   function addType() {
     const t = newType.trim();
     if (!t || !selManuf || !selModel) return;
     const types = catalog[selManuf]?.[selModel] || [];
     if (types.includes(t)) return;
-    saveCatalog({ ...catalog, [selManuf]: { ...catalog[selManuf], [selModel]: [...types, t] } });
+    saveMaster({ ...catalog, [selManuf]: { ...catalog[selManuf], [selModel]: [...types, t] } });
     setNewType('');
+    // apri subito l'editor del range per il nuovo tipo
+    setEditRangeKey(rangeKey(selManuf, selModel, t));
   }
   function removeType(manuf, model, type) {
     const types = (catalog[manuf]?.[model] || []).filter(t => t !== type);
-    saveCatalog({ ...catalog, [manuf]: { ...catalog[manuf], [model]: types } });
+    const nextRanges = { ...ranges };
+    delete nextRanges[rangeKey(manuf, model, type)];
+    saveMaster({ ...catalog, [manuf]: { ...catalog[manuf], [model]: types } }, nextRanges);
   }
   function moveType(manuf, model, type, dir) {
     const types = [...(catalog[manuf]?.[model] || [])];
@@ -1072,7 +1087,15 @@ function CatalogoTab({ catalog, setCatalog, saving, setSaving }) {
     if (dir === 'down' && i === types.length - 1) return;
     const j = dir === 'up' ? i - 1 : i + 1;
     [types[i], types[j]] = [types[j], types[i]];
-    saveCatalog({ ...catalog, [manuf]: { ...catalog[manuf], [model]: types } });
+    saveMaster({ ...catalog, [manuf]: { ...catalog[manuf], [model]: types } });
+  }
+  // Salva/rimuove il range di un tipo (chiamato dal modal editor)
+  function saveRange(key, rangeObj) {
+    const nextRanges = { ...ranges };
+    if (rangeObj) nextRanges[key] = rangeObj;
+    else delete nextRanges[key]; // range vuoto → torna a input libero
+    saveMaster(catalog, nextRanges);
+    setEditRangeKey(null);
   }
 
   const manufs = Object.keys(catalog).sort();
@@ -1157,10 +1180,22 @@ function CatalogoTab({ catalog, setCatalog, saving, setSaving }) {
           <div className="flex-1 overflow-y-auto p-4 space-y-1 max-h-96">
             {!selModel ? <p className="text-gray-400 text-sm text-center py-4">Seleziona un modello.</p>
               : types.length === 0 ? <p className="text-gray-400 text-sm text-center py-4">Nessun tipo.</p>
-              : types.map((t, i) => (
+              : types.map((t, i) => {
+                const hasRange = !!ranges[rangeKey(selManuf, selModel, t)];
+                return (
                 <div key={t} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
-                  <span className="text-sm text-gray-700 flex-1">{t}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-gray-700 block truncate">{t}</span>
+                    <span className={`inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${hasRange ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {hasRange ? 'range ✓' : 'no range'}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-1 ml-2">
+                    <button onClick={() => setEditRangeKey(rangeKey(selManuf, selModel, t))} disabled={saving}
+                      title="Modifica range diottrico"
+                      className="text-xs font-bold px-2 py-1 rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 disabled:opacity-40">
+                      Range
+                    </button>
                     <button onClick={() => moveType(selManuf, selModel, t, 'up')} disabled={i === 0 || saving} className="text-gray-300 hover:text-gray-600 disabled:opacity-20">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
                     </button>
@@ -1172,7 +1207,7 @@ function CatalogoTab({ catalog, setCatalog, saving, setSaving }) {
                     </button>
                   </div>
                 </div>
-              ))
+              );})
             }
           </div>
           <div className="p-4 border-t border-gray-100 flex gap-2">
@@ -1192,6 +1227,175 @@ function CatalogoTab({ catalog, setCatalog, saving, setSaving }) {
           <pre className="mt-3 text-xs text-gray-500 overflow-x-auto bg-gray-50 p-4 rounded-lg border border-gray-100">{JSON.stringify(catalog, null, 2)}</pre>
         </details>
       </div>
+
+      {editRangeKey && (
+        <RangeEditorModal
+          rkey={editRangeKey}
+          range={ranges[editRangeKey] || null}
+          saving={saving}
+          onSave={saveRange}
+          onClose={() => setEditRangeKey(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Campo di testo del range editor — definito a livello di modulo così non
+// viene rimontato a ogni render (altrimenti l'input perde il focus).
+function RangeField({ label, value, onChange, ph }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-bold text-gray-500 mb-1">{label}</label>
+      <input type="text" inputMode="decimal" value={value} placeholder={ph}
+        onChange={e => onChange(e.target.value)}
+        className="w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 focus:ring-indigo-500 focus:border-indigo-500" />
+    </div>
+  );
+}
+
+// ── Editor range diottrico di un tipo lente ───────────────────────────
+// rkey = "produttore::modello::tipo". Un campo lasciato vuoto viene omesso
+// dal range (→ nella app quel parametro torna a input libero).
+function RangeEditorModal({ rkey, range, saving, onSave, onClose }) {
+  const [manuf, model, type] = rkey.split('::');
+  const lc = (type || '').toLowerCase();
+  const isToric = lc.includes('toric');            // "Torica"/"toric"
+  const isMulti = lc.includes('multifoc') || lc.includes('progress');
+
+  const num = v => (v === '' || v == null ? '' : String(v));
+  const addInit = range?.add;
+  const [f, setF] = useState({
+    pwrMin:  num(range?.pwr?.min),
+    pwrMax:  num(range?.pwr?.max),
+    cylMin:  num(range?.cyl?.min),
+    cylMax:  num(range?.cyl?.max),
+    axisMin: num(range?.axis?.min),
+    axisMax: num(range?.axis?.max),
+    addMode: addInit?.values ? 'values' : (addInit ? 'range' : 'none'),
+    addMin:  num(addInit?.min),
+    addMax:  num(addInit?.max),
+    addValues: addInit?.values ? addInit.values.join(', ') : '',
+    bc:  range?.bc  != null ? String(range.bc)  : '',
+    dia: range?.dia != null ? String(range.dia) : '',
+  });
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  function handleSave() {
+    const r = {};
+    const n = v => Number(String(v).replace(',', '.'));
+    if (f.pwrMin !== '' && f.pwrMax !== '') r.pwr = { min: n(f.pwrMin), max: n(f.pwrMax) };
+    if (f.cylMin !== '' && f.cylMax !== '') r.cyl = { min: n(f.cylMin), max: n(f.cylMax) };
+    if (f.axisMin !== '' && f.axisMax !== '') r.axis = { min: n(f.axisMin), max: n(f.axisMax) };
+    if (f.addMode === 'range' && f.addMin !== '' && f.addMax !== '') r.add = { min: n(f.addMin), max: n(f.addMax) };
+    if (f.addMode === 'values') {
+      const vals = f.addValues.split(',').map(s => s.trim()).filter(Boolean);
+      if (vals.length) r.add = { values: vals };
+    }
+    if (f.bc.trim())  r.bc  = f.bc.trim();
+    if (f.dia.trim()) r.dia = f.dia.trim();
+    onSave(rkey, Object.keys(r).length ? r : null);
+  }
+
+  const fld = (label, k, ph) => (
+    <RangeField label={label} value={f[k]} onChange={v => set(k, v)} ph={ph} />
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl border-t-4 border-indigo-600 max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex items-start justify-between mb-1">
+            <h3 className="text-lg font-bold text-gray-900">Range diottrico</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mb-1">{manuf} · {model}</p>
+          <p className="text-sm font-semibold text-indigo-700 mb-4">{type}</p>
+
+          <p className="text-[11px] text-gray-400 mb-4">
+            Inserisci i valori di produzione. I campi vuoti vengono ignorati (nella app quel parametro torna a input libero).
+            {isToric && ' · Tipo torico → compila anche Cilindro e Asse.'}
+            {isMulti && ' · Tipo multifocale → compila anche Addizione.'}
+          </p>
+
+          {/* Sfera */}
+          <div className="mb-4">
+            <p className="text-xs font-bold text-gray-700 mb-2">Sfera (PWR)</p>
+            <div className="grid grid-cols-2 gap-3">
+              {fld('Min (es. -12.00)', 'pwrMin', '-12.00')}
+              {fld('Max (es. +6.00)', 'pwrMax', '+6.00')}
+            </div>
+          </div>
+
+          {/* Cilindro + Asse */}
+          <div className="mb-4">
+            <p className="text-xs font-bold text-gray-700 mb-2">Cilindro (CYL) &amp; Asse — solo toriche</p>
+            <div className="grid grid-cols-2 gap-3 mb-2">
+              {fld('CYL min (es. -2.25)', 'cylMin', '-2.25')}
+              {fld('CYL max (es. -0.75)', 'cylMax', '-0.75')}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {fld('Asse min (es. 10)', 'axisMin', '10')}
+              {fld('Asse max (es. 180)', 'axisMax', '180')}
+            </div>
+          </div>
+
+          {/* Addizione */}
+          <div className="mb-4">
+            <p className="text-xs font-bold text-gray-700 mb-2">Addizione (ADD) — solo multifocali</p>
+            <div className="flex gap-2 mb-2">
+              {[['none','Nessuna'],['values','Valori (LOW/MID/HIGH)'],['range','Intervallo']].map(([v,lbl]) => (
+                <button key={v} type="button" onClick={() => set('addMode', v)}
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition ${f.addMode === v ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+            {f.addMode === 'values' && (
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 mb-1">Valori separati da virgola</label>
+                <input type="text" value={f.addValues} placeholder="LOW, MID, HIGH  oppure  +1.25, +2.00, +2.50"
+                  onChange={e => set('addValues', e.target.value)}
+                  className="w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 focus:ring-indigo-500 focus:border-indigo-500" />
+              </div>
+            )}
+            {f.addMode === 'range' && (
+              <div className="grid grid-cols-2 gap-3">
+                {fld('ADD min (es. +1.00)', 'addMin', '+1.00')}
+                {fld('ADD max (es. +3.00)', 'addMax', '+3.00')}
+              </div>
+            )}
+          </div>
+
+          {/* BC / DIA */}
+          <div className="mb-6">
+            <p className="text-xs font-bold text-gray-700 mb-2">Curva base &amp; Diametro (informativi)</p>
+            <div className="grid grid-cols-2 gap-3">
+              {fld('BC (es. 8.6)', 'bc', '8.6')}
+              {fld('DIA (es. 14.2)', 'dia', '14.2')}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <button onClick={() => onSave(rkey, null)} disabled={saving}
+              className="text-xs font-semibold text-red-500 hover:text-red-600 disabled:opacity-40">
+              Svuota range (input libero)
+            </button>
+            <div className="flex gap-2">
+              <button onClick={onClose} disabled={saving}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 disabled:opacity-40">
+                Annulla
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40">
+                {saving ? 'Salvataggio…' : 'Salva range'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1200,6 +1404,7 @@ function CatalogoTab({ catalog, setCatalog, saving, setSaving }) {
 function SuperAdminPanel({ user }) {
   const [activeTab, setActiveTab] = useState('catalog');
   const [catalog, setCatalog]     = useState({});
+  const [ranges, setRanges]       = useState({});
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
 
@@ -1214,6 +1419,7 @@ function SuperAdminPanel({ user }) {
   useEffect(() => {
     getDoc(doc(db, 'catalogs', 'master')).then(snap => {
       setCatalog(snap.exists() ? (snap.data().data || {}) : {});
+      setRanges(snap.exists() ? (snap.data().ranges || {}) : {});
       setLoading(false);
     });
   }, []);
@@ -1278,7 +1484,7 @@ function SuperAdminPanel({ user }) {
         </div>
       </nav>
 
-      {activeTab === 'catalog' && <CatalogoTab catalog={catalog} setCatalog={setCatalog} saving={saving} setSaving={setSaving} />}
+      {activeTab === 'catalog' && <CatalogoTab catalog={catalog} setCatalog={setCatalog} ranges={ranges} setRanges={setRanges} saving={saving} setSaving={setSaving} />}
       {activeTab === 'ottici'    && <OtticiTab catalog={catalog} />}
       {activeTab === 'clienti'   && <ClientiTab />}
       {activeTab === 'forniture' && <FornitureTab />}
