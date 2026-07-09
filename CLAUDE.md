@@ -112,11 +112,14 @@ Popolato con i prodotti di https://www.visionottica.it/collections/lenti-a-conta
 
 Modulo **Push&Go** dentro nuovaconsole (`Desktop/nuovaconsole/src/PushGo.js`, tab "Push&Go ⚡" nella sezione Contattologia): seconda app Firebase (`initializeApp(..., 'pushgo')`) puntata al progetto `ordinalac`, login con le credenziali ottico del portale, lista ordini real-time (stato/WhatsApp/elimina) e generatore QR con select vincolati ai range. Dipendenza `qrcode.react` aggiunta a nuovaconsole. Vedi CLAUDE.md di nuovaconsole.
 
+## Logo Push&Go (09/07/2026 — commit 613f5ff)
+
+Sostituito il vecchio logo a occhio (retaggio OrdinaLac) con il logo Push&Go: **fulmine dentro anello, gradiente blu (#2563eb→#06b6d4), sfondo trasparente**. Sorgente vettoriale: `public/logo.svg`. Icone rigenerate: `icon.png`/`icon-192`/`icon-512`/`favicon.png` (tutte alpha trasparente), `apple-touch-icon.png` (sfondo bianco, richiesto da iOS). `index.html`: aggiunto favicon SVG vettoriale + apple-touch-icon dedicato. Usato in login/navbar via `<img src="/icon-192.png">`. Deployato in produzione e verificato live. (cairosvg non disponibile in locale; i PNG erano già stati rasterizzati in una sessione precedente — restavano solo non committati.)
+
 ## TODO aperti
 
 1. Pagamenti digitali (tab "Pagamento" nella ClientApp è ancora placeholder "disponibile a breve")
-2. **Logo con sfondo verde scuro**: `icon.png` (e quindi favicon/icone PWA/logo login) ha uno sfondo verde squadrato non trasparente — rigenerare l'immagine con sfondo trasparente o bianco; valutare anche un logo nuovo per il brand Push&Go
-3. Range non gestiti dal listino ottico: se il SuperAdmin aggiunge un tipo nuovo a catalogo senza range, i campi tornano input libero (comportamento voluto, ma i range nuovi vanno importati a mano)
+2. Range non gestiti dal listino ottico: se il SuperAdmin aggiunge un tipo nuovo a catalogo senza range, i campi tornano input libero (comportamento voluto, ma i range nuovi vanno importati a mano)
 
 ## Verifica UI in locale (08/07/2026)
 
