@@ -112,15 +112,15 @@ Popolato con i prodotti di https://www.visionottica.it/collections/lenti-a-conta
 
 Modulo **Push&Go** dentro nuovaconsole (`Desktop/nuovaconsole/src/PushGo.js`, tab "Push&Go ⚡" nella sezione Contattologia): seconda app Firebase (`initializeApp(..., 'pushgo')`) puntata al progetto `ordinalac`, login con le credenziali ottico del portale, lista ordini real-time (stato/WhatsApp/elimina) e generatore QR con select vincolati ai range. Dipendenza `qrcode.react` aggiunta a nuovaconsole. Vedi CLAUDE.md di nuovaconsole.
 
-## Logo Push&Go (09/07/2026 — commit 613f5ff)
+## Logo (09/07/2026 — commit 95947e6)
 
-Sostituito il vecchio logo a occhio (retaggio OrdinaLac) con il logo Push&Go: **fulmine dentro anello, gradiente blu (#2563eb→#06b6d4), sfondo trasparente**. Sorgente vettoriale: `public/logo.svg`. Icone rigenerate: `icon.png`/`icon-192`/`icon-512`/`favicon.png` (tutte alpha trasparente), `apple-touch-icon.png` (sfondo bianco, richiesto da iOS). `index.html`: aggiunto favicon SVG vettoriale + apple-touch-icon dedicato. Usato in login/navbar via `<img src="/icon-192.png">`. Deployato in produzione e verificato live. (cairosvg non disponibile in locale; i PNG erano già stati rasterizzati in una sessione precedente — restavano solo non committati.)
+**Il logo ufficiale è l'OCCHIO OrdinaLac** — l'utente lo vuole così, NON sostituirlo (un tentativo di rebrand col fulmine Push&Go è stato deployato e poi revertato lo stesso giorno, commit 2589fdb). Risolto il problema storico dello **sfondo verde**: il sorgente `public/icon.png` (4096px) era già trasparente, ma le miniature `icon-192`/`icon-512`/`favicon.png` erano state appiattite da ffmpeg sul canale colore verde sottostante. Rigenerate con Pillow (`Image.resize` LANCZOS) preservando l'alpha → occhio su sfondo trasparente. Verificato live. Usato in login/navbar via `<img src="/icon-192.png">`.
 
 ## Editor range da SuperAdmin (09/07/2026 — commit 223e0a8)
 
 Nel tab **Catalogo Master** ora si editano i range diottrici dalla UI (prima erano importabili solo via script):
 - Ogni tipo lente ha un pulsante **"Range"** + badge **"range ✓" / "no range"** (copertura a colpo d'occhio).
-- `RangeEditorModal`: form per PWR/CYL/Asse/ADD/BC/DIA. ADD in tre modalità (Nessuna / Valori LOW-MID-HIGH separati da virgola / Intervallo min-max). Hint automatico se il tipo è torico/multifocale. Campo vuoto → quel parametro è **omesso** dal range (nella app torna a input libero).
+- `RangeEditorModal`: form per PWR/CYL/Asse/ADD/BC/DIA. ADD in tre modalità (Nessuna / Valori LOW-MID-HIGH separati da virgola / Intervallo min-max). CYL ha anche il campo **Step** (vuoto = 0.50, salvato come `cyl.step`, usato da `cylOptions`). Hint automatico se il tipo è torico/multifocale. Campo vuoto → quel parametro è **omesso** dal range (nella app torna a input libero).
 - Creando un **tipo nuovo** l'editor si apre in automatico → si compila subito il range (chiude il vecchio TODO 2).
 - I range dei 58 tipi iniziali sono modificabili allo stesso modo.
 - **FIX importante**: `saveMaster` in `CatalogoTab` ora riscrive il doc `catalogs/master` con **entrambi** `data` e `ranges`. Prima `saveCatalog` faceva `setDoc(..., { data })` **senza merge**, quindi ogni modifica al catalogo **cancellava tutti i range**. Rimuovere tipo/modello/produttore ripulisce anche i range orfani.
