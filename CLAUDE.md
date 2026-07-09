@@ -116,10 +116,19 @@ Modulo **Push&Go** dentro nuovaconsole (`Desktop/nuovaconsole/src/PushGo.js`, ta
 
 Sostituito il vecchio logo a occhio (retaggio OrdinaLac) con il logo Push&Go: **fulmine dentro anello, gradiente blu (#2563eb→#06b6d4), sfondo trasparente**. Sorgente vettoriale: `public/logo.svg`. Icone rigenerate: `icon.png`/`icon-192`/`icon-512`/`favicon.png` (tutte alpha trasparente), `apple-touch-icon.png` (sfondo bianco, richiesto da iOS). `index.html`: aggiunto favicon SVG vettoriale + apple-touch-icon dedicato. Usato in login/navbar via `<img src="/icon-192.png">`. Deployato in produzione e verificato live. (cairosvg non disponibile in locale; i PNG erano già stati rasterizzati in una sessione precedente — restavano solo non committati.)
 
+## Editor range da SuperAdmin (09/07/2026 — commit 223e0a8)
+
+Nel tab **Catalogo Master** ora si editano i range diottrici dalla UI (prima erano importabili solo via script):
+- Ogni tipo lente ha un pulsante **"Range"** + badge **"range ✓" / "no range"** (copertura a colpo d'occhio).
+- `RangeEditorModal`: form per PWR/CYL/Asse/ADD/BC/DIA. ADD in tre modalità (Nessuna / Valori LOW-MID-HIGH separati da virgola / Intervallo min-max). Hint automatico se il tipo è torico/multifocale. Campo vuoto → quel parametro è **omesso** dal range (nella app torna a input libero).
+- Creando un **tipo nuovo** l'editor si apre in automatico → si compila subito il range (chiude il vecchio TODO 2).
+- I range dei 58 tipi iniziali sono modificabili allo stesso modo.
+- **FIX importante**: `saveMaster` in `CatalogoTab` ora riscrive il doc `catalogs/master` con **entrambi** `data` e `ranges`. Prima `saveCatalog` faceva `setDoc(..., { data })` **senza merge**, quindi ogni modifica al catalogo **cancellava tutti i range**. Rimuovere tipo/modello/produttore ripulisce anche i range orfani.
+- Struttura invariata: `ranges["produttore::modello::tipo"] = { pwr, cyl, axis, add:{min,max}|{values:[]}, bc, dia }`. Consumata da `src/lib/lensRanges.js` (invariato).
+
 ## TODO aperti
 
 1. Pagamenti digitali (tab "Pagamento" nella ClientApp è ancora placeholder "disponibile a breve")
-2. Range non gestiti dal listino ottico: se il SuperAdmin aggiunge un tipo nuovo a catalogo senza range, i campi tornano input libero (comportamento voluto, ma i range nuovi vanno importati a mano)
 
 ## Verifica UI in locale (08/07/2026)
 
