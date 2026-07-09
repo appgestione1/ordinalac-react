@@ -3,7 +3,9 @@ import { signInAnonymously } from 'firebase/auth';
 import { doc, getDoc, setDoc, addDoc, onSnapshot, collection, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import EyeConfig from '../components/EyeConfig';
+import InstallGate from '../components/InstallGate';
 import { getRange } from '../lib/lensRanges';
+import { isIOS, isStandalone } from '../lib/platform';
 
 // ── localStorage keys ────────────────────────────────────────────────
 const LS = {
@@ -50,6 +52,10 @@ function buildEyeParams(e) {
 
 const EMPTY_EYE = { qty: '1', type: '', pwr: '', cyl: '', axis: '', add: '' };
 
+// Anagrafica obbligatoria: senza questi dati (+ privacy) non si accede alla action view
+const storedProfileComplete = () =>
+  ['name', 'phone', 'email', 'cf'].every(k => ls(k).trim()) && ls('privacy') === 'true';
+
 export default function ClientApp() {
   const [view, setView] = useState('loading'); // 'loading' | 'no-qr' | 'settings' | 'action'
   const [activeTab, setActiveTab] = useState('patient');
@@ -65,6 +71,8 @@ export default function ClientApp() {
   const [email, setEmail] = useState('');
   const [cf, setCf]       = useState('');
   const [privacy, setPrivacy] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [mustComplete, setMustComplete] = useState(false);
 
   // Consegna
   const [delivery, setDelivery]     = useState('pickup');
@@ -201,6 +209,7 @@ export default function ClientApp() {
     if (params.get('dev') === '1') {
       setName('Mario Rossi'); setPhone('3331234567');
       setEmail('mario@test.it'); setCf('RSSMRO80A01H501A');
+      setPrivacy(true);
       setLensData(DEV_LENSDATA);
       setManufacturer('DAILIES'); setModel('DAILIES TOTAL1');
       setOd({ qty: '1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
@@ -225,6 +234,14 @@ export default function ClientApp() {
 
     // QR code scan
     if (params.has('oid') || params.has('n')) {
+      // App installata su iOS: la start_url include i params del QR originale,
+      // quindi arrivano a OGNI avvio. Se lo storage locale è già popolato ha
+      // dati più aggiornati (es. prescrizione modificata) → precedenza a lui.
+      if (isStandalone() && ls('opticianId')) {
+        history.replaceState(null, document.title, window.location.pathname);
+        await loadFromStorage(ls('opticianId'));
+        return;
+      }
       const qr = {
         n: params.get('n') || '', oid: params.get('oid') || '',
         ph: params.get('ph') || '', e: params.get('e') || '', cf: params.get('cf') || '',
@@ -236,7 +253,11 @@ export default function ClientApp() {
         tos: params.get('tos') || '', pos: params.get('pos') || '',
         cos: params.get('cos') || '', aos: params.get('aos') || '', addos: params.get('addos') || '',
       };
-      history.replaceState(null, document.title, window.location.pathname);
+      // Su iOS nel browser i params restano nell'URL: "Aggiungi a schermata Home"
+      // li congela nella start_url (lo storage della webapp iOS è separato da Safari)
+      if (!isIOS || isStandalone()) {
+        history.replaceState(null, document.title, window.location.pathname);
+      }
       await loadFromQR(qr);
       return;
     }
@@ -297,6 +318,12 @@ export default function ClientApp() {
 
     if (savedId) await fetchLensData(savedId);
     setLensLocked(true);
+    // Anagrafica incompleta → il cliente deve prima completare i dati obbligatori
+    if (!storedProfileComplete()) {
+      setMustComplete(true);
+      setView('settings');
+      return;
+    }
     setView('action');
   }
 
@@ -316,8 +343,28 @@ export default function ClientApp() {
 
   // ── Salva impostazioni ──────────────────────────────────────────────
   async function saveSettings() {
-    if (!name.trim()) { alert('Inserisci il tuo nome e cognome per continuare.'); return; }
-    if (!privacy) { alert('Devi accettare la Privacy Policy per continuare.'); return; }
+    // Anagrafica obbligatoria: nome, telefono, email, CF, privacy
+    // (indirizzo completo solo se consegna a domicilio)
+    const errs = {};
+    if (!name.trim()) errs.name = 'Inserisci nome e cognome';
+    if (phone.replace(/\D/g, '').length < 8) errs.phone = 'Inserisci un numero valido';
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) errs.email = 'Inserisci una email valida';
+    if (!/^[A-Z0-9]{16}$/i.test(cf.trim())) errs.cf = 'Il codice fiscale ha 16 caratteri';
+    if (delivery === 'delivery') {
+      if (!addrStreet.trim()) errs.addrStreet = 'Obbligatorio per la consegna';
+      if (!/^\d{5}$/.test(addrCap.trim())) errs.addrCap = 'CAP non valido';
+      if (!addrCity.trim()) errs.addrCity = 'Obbligatorio';
+      if (!addrProv.trim()) errs.addrProv = 'Obbl.';
+    }
+    if (!privacy) errs.privacy = 'Devi accettare la Privacy Policy per continuare';
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      setActiveTab('patient');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    setErrors({});
+    setMustComplete(false);
     const streetFull = [addrStreet.trim(), addrNum.trim()].filter(Boolean).join(' ');
     const addrFull = `${streetFull}, ${addrCap} ${addrCity} (${addrProv})`.trim();
 
@@ -356,6 +403,13 @@ export default function ClientApp() {
 
   // ── Invia ordine ────────────────────────────────────────────────────
   async function sendOrder() {
+    // Consegna a domicilio scelta dalla action view ma indirizzo mai inserito
+    if (delivery === 'delivery' && !(ls('addrStreet').trim() && ls('addrCity').trim())) {
+      setErrors({ addrStreet: 'Obbligatorio per la consegna', addrCity: 'Obbligatorio' });
+      setActiveTab('patient');
+      setView('settings');
+      return;
+    }
     setOrderStatus('sending');
     const addrFull  = ls('address');
     const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
@@ -430,6 +484,10 @@ export default function ClientApp() {
   const odParams = buildEyeParams(od);
   const osParams = buildEyeParams(os);
 
+  const inputCls = err =>
+    `mt-1 block w-full px-3 py-2 border rounded-md shadow-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500 ${err ? 'border-red-400 bg-red-50' : 'border-gray-300'}`;
+  const fieldErr = key => errors[key] && <p className="text-xs text-red-500 mt-1">{errors[key]}</p>;
+
   // ── NO QR ────────────────────────────────────────────────────────────
   if (view === 'no-qr') return (
     <div className="fixed inset-0 bg-gray-100 flex flex-col items-center justify-center p-8 text-center">
@@ -448,6 +506,7 @@ export default function ClientApp() {
 
   if (view === 'loading') return (
     <div className="fixed inset-0 flex items-center justify-center bg-white">
+      <InstallGate />
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
     </div>
   );
@@ -455,11 +514,20 @@ export default function ClientApp() {
   // ── SETTINGS VIEW ─────────────────────────────────────────────────────
   if (view === 'settings') return (
     <>
+      <InstallGate />
       <div className="max-w-md mx-auto min-h-screen bg-white shadow-lg p-6 flex flex-col">
         <div className="mb-4">
           <h1 className="text-3xl font-bold text-gray-800">Benvenuto</h1>
-          <p className="text-gray-600 text-xs">Verifica i tuoi dati per completare l'installazione.</p>
+          <p className="text-gray-600 text-xs">Verifica i tuoi dati per completare l'installazione. I campi con * sono obbligatori.</p>
         </div>
+
+        {(mustComplete || Object.keys(errors).length > 0) && (
+          <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4 text-sm text-amber-800">
+            {Object.keys(errors).length > 0
+              ? 'Controlla i campi evidenziati in rosso.'
+              : 'Completa i dati obbligatori (*) per usare l\'app.'}
+          </div>
+        )}
 
         {/* Tab bar */}
         <div className="flex border-b border-gray-200 mb-6">
@@ -478,26 +546,30 @@ export default function ClientApp() {
           <div className="space-y-4 flex-1 pb-24">
             <h2 className="text-lg font-semibold text-gray-700 pb-2">Informazioni Personali</h2>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Nome e Cognome</label>
+              <label className="block text-sm font-medium text-gray-700">Nome e Cognome *</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
+                className={inputCls(errors.name)} />
+              {fieldErr('name')}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Telefono</label>
+                <label className="block text-sm font-medium text-gray-700">Telefono *</label>
                 <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
+                  className={inputCls(errors.phone)} />
+                {fieldErr('phone')}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <label className="block text-sm font-medium text-gray-700">Email *</label>
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
+                  className={inputCls(errors.email)} />
+                {fieldErr('email')}
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Codice Fiscale</label>
+              <label className="block text-sm font-medium text-gray-700">Codice Fiscale *</label>
               <input type="text" value={cf} onChange={e => setCf(e.target.value.toUpperCase())}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm uppercase bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
+                className={`${inputCls(errors.cf)} uppercase`} />
+              {fieldErr('cf')}
             </div>
 
             <div className={`p-4 rounded-md border space-y-3 transition ${delivery === 'delivery' ? 'bg-gray-50 border-gray-200' : 'bg-gray-50 border-dashed border-gray-200 opacity-60'}`}>
@@ -511,7 +583,8 @@ export default function ClientApp() {
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-gray-500">Via / Piazza</label>
                   <input type="text" value={addrStreet} onChange={e => setAddrStreet(e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
+                    className={`${inputCls(errors.addrStreet)} text-sm`} />
+                  {fieldErr('addrStreet')}
                 </div>
                 <div className="w-20">
                   <label className="block text-xs font-medium text-gray-500">N.</label>
@@ -523,26 +596,30 @@ export default function ClientApp() {
                 <div className="w-24">
                   <label className="block text-xs font-medium text-gray-500">CAP</label>
                   <input type="text" value={addrCap} onChange={e => setAddrCap(e.target.value)} maxLength={5}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
+                    className={`${inputCls(errors.addrCap)} text-sm`} />
+                  {fieldErr('addrCap')}
                 </div>
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-gray-500">Città</label>
                   <input type="text" value={addrCity} onChange={e => setAddrCity(e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
+                    className={`${inputCls(errors.addrCity)} text-sm`} />
+                  {fieldErr('addrCity')}
                 </div>
                 <div className="w-16">
                   <label className="block text-xs font-medium text-gray-500">Prov.</label>
                   <input type="text" value={addrProv} onChange={e => setAddrProv(e.target.value.toUpperCase())} maxLength={2}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm uppercase bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500 text-center" />
+                    className={`${inputCls(errors.addrProv)} text-sm uppercase text-center`} />
+                  {fieldErr('addrProv')}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-start mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
+            <div className={`flex items-start mt-4 p-4 rounded-lg border shadow-sm ${errors.privacy ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-200'}`}>
               <input id="privacy" type="checkbox" checked={privacy} onChange={e => setPrivacy(e.target.checked)}
                 className="h-5 w-5 text-blue-600 border-gray-300 rounded mt-0.5 cursor-pointer" />
               <div className="ml-3 text-sm">
-                <label htmlFor="privacy" className="font-bold text-gray-800 cursor-pointer">Consenso Privacy (GDPR)</label>
+                <label htmlFor="privacy" className="font-bold text-gray-800 cursor-pointer">Consenso Privacy (GDPR) *</label>
+                {fieldErr('privacy')}
                 <p className="text-gray-600 text-xs mt-1 text-justify">
                   Dichiaro di aver preso visione dell'informativa privacy ai sensi del Regolamento UE 2016/679. Acconsento al trattamento dei miei dati personali (inclusi i dati optometrici) per la gestione dell'ordine, la fatturazione e le comunicazioni di servizio. I dati potranno essere comunicati a terzi (fornitore, corriere) esclusivamente per l'evasione dell'ordine e la spedizione.
                 </p>
@@ -610,6 +687,7 @@ export default function ClientApp() {
             </div>
             <h2 className="text-xl font-bold text-gray-800">Pagamenti Digitali</h2>
             <p className="text-gray-500 mt-2">Questa funzionalità sarà disponibile a breve.<br />Per ora il pagamento avverrà in negozio o alla consegna.</p>
+            <p className="text-gray-400 text-xs mt-3">Quando la sezione sarà attiva, al primo ordine ti chiederemo anche i dati di pagamento.</p>
           </div>
         )}
 
@@ -640,6 +718,7 @@ export default function ClientApp() {
   // ── ACTION VIEW ────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-6 backdrop-blur-sm">
+      <InstallGate />
       <div className="bg-white w-full max-w-md rounded-2xl shadow-xl p-6 relative text-center">
 
         {orderStatus === 'sending' && (

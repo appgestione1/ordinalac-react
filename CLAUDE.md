@@ -126,9 +126,31 @@ Nel tab **Catalogo Master** ora si editano i range diottrici dalla UI (prima era
 - **FIX importante**: `saveMaster` in `CatalogoTab` ora riscrive il doc `catalogs/master` con **entrambi** `data` e `ranges`. Prima `saveCatalog` faceva `setDoc(..., { data })` **senza merge**, quindi ogni modifica al catalogo **cancellava tutti i range**. Rimuovere tipo/modello/produttore ripulisce anche i range orfani.
 - Struttura invariata: `ranges["produttore::modello::tipo"] = { pwr, cyl, axis, add:{min,max}|{values:[]}, bc, dia }`. Consumata da `src/lib/lensRanges.js` (invariato).
 
+## Install gate PWA + anagrafica obbligatoria (09/07/2026)
+
+**Blocco totale su mobile** (scelta esplicita dell'utente): la ClientApp è utilizzabile solo come app installata sulla schermata Home.
+
+- `public/sw.js`: service worker minimo (network-first sulle navigazioni) — richiesto da Chrome/Android per il prompt di installazione. Registrato in `main.jsx` solo in PROD.
+- `main.jsx` cattura `beforeinstallprompt` il prima possibile in `window.__bipEvent` + evento `bip-ready` (può scattare prima che React monti il gate).
+- `src/lib/platform.js`: `isIOS` (incluso iPadOS come MacIntel+touch), `isAndroid`, `isMobile`, `isInAppBrowser`, `isStandalone()`.
+- `src/components/InstallGate.jsx` (renderizzato nelle viste loading/settings/action, NON in no-qr): 
+  - Android + prompt nativo → pulsante "Installa Push&Go"; senza prompt (Firefox / già installata) → istruzioni menu ⋮
+  - iOS → istruzioni Condividi → Aggiungi alla schermata Home
+  - Browser in-app (Instagram/FB/TikTok...) → istruzioni "apri nel browser" + copia link
+  - Esenti: desktop, standalone, `?dev=...`
+- **Storage iOS separato da Safari**: la webapp installata su iOS NON vede il localStorage di Safari. Soluzione: su iOS browser i params del QR NON vengono strippati dall'URL e il gate riscrive il `<link rel="manifest">` con un manifest `data:` la cui `start_url` = URL corrente (params inclusi) → l'app installata riparte dal QR. A ogni avvio standalone, se localStorage è già popolato ha la precedenza sui params (init → `loadFromStorage`), così le prescrizioni aggiornate non vengono sovrascritte.
+- Su Android lo storage è condiviso col browser → manifest statico invariato (`start_url: "/"`, aggiunti `id` e `scope`).
+
+**Anagrafica obbligatoria** prima di usare l'app: nome, telefono (≥8 cifre), email, CF (16 char) + privacy; indirizzo completo (via/CAP/città/prov) solo se consegna a domicilio.
+- `saveSettings` valida e mostra errori inline (bordo rosso + messaggio, banner in alto, tab Dati Cliente forzata)
+- `storedProfileComplete()`: al ritorno con profilo incompleto → vista settings con banner "Completa i dati obbligatori", non action
+- `sendOrder` guarda: consegna a domicilio senza indirizzo salvato → rimanda ai settings
+- `?dev=1` ora setta anche privacy=true
+- Verificato con Playwright (26/26): gate Android/iOS/in-app, standalone senza gate, manifest dinamico iOS con params, validazione, ritorno incompleto, desktop e dev esenti.
+
 ## TODO aperti
 
-1. Pagamenti digitali (tab "Pagamento" nella ClientApp è ancora placeholder "disponibile a breve")
+1. Pagamenti digitali (tab "Pagamento" nella ClientApp è ancora placeholder "disponibile a breve"; quando pronta, i dati di pagamento andranno richiesti al primo ordine — nota già presente nella tab)
 
 ## Verifica UI in locale (08/07/2026)
 
