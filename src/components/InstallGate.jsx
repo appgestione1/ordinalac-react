@@ -16,9 +16,18 @@ export default function InstallGate() {
   const [bip, setBip] = useState(window.__bipEvent || null);
   const [installed, setInstalled] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Su Android beforeinstallprompt arriva 1-2s dopo il load: senza attesa si
+  // vedrebbero le istruzioni manuali per un attimo e poi il pulsante (flash)
+  const [bipTimedOut, setBipTimedOut] = useState(false);
 
   const devMode = new URLSearchParams(window.location.search).has('dev');
   const active = isMobile && !isStandalone() && !devMode;
+
+  useEffect(() => {
+    if (!active || !isAndroid) return;
+    const t = setTimeout(() => setBipTimedOut(true), 4000);
+    return () => clearTimeout(t);
+  }, [active]);
 
   useEffect(() => {
     if (!active) return;
@@ -123,6 +132,15 @@ export default function InstallGate() {
           className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg text-lg hover:bg-blue-700">
           ⬇ Installa Push&Go
         </button>
+      </>
+    );
+  } else if (isAndroid && !bipTimedOut) {
+    // In attesa di beforeinstallprompt: schermata neutra, niente flash
+    content = (
+      <>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Installa l'app per continuare</h2>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto my-6" />
+        <p className="text-gray-500 text-sm">Un attimo, preparo l'installazione…</p>
       </>
     );
   } else if (isAndroid) {
