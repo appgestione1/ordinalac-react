@@ -4,7 +4,28 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="manifest" href="/manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Push&Go" />
+    <script>
+      // Su iOS NIENTE manifest: "Aggiungi alla schermata Home" così congela
+      // l'URL corrente (parametri QR inclusi) come start URL della webapp.
+      // Serve perché lo storage dell'app installata su iOS è separato da
+      // Safari e con start_url "/" l'app partirebbe vuota ("App non
+      // configurata"). Su Android il manifest resta: serve per il prompt
+      // di installazione e lo storage è condiviso col browser.
+      (function () {
+        var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent)
+          || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (!isIOS) {
+          var l = document.createElement('link');
+          l.rel = 'manifest';
+          l.href = '/manifest.json';
+          document.head.appendChild(l);
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#2563eb" />
     <meta name="description" content="Push&Go — L'ordine delle lenti a contatto, con un click. Scansiona il QR del tuo ottico e riordina quando vuoi." />

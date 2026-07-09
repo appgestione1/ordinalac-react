@@ -5,9 +5,10 @@ import { isIOS, isAndroid, isMobile, isInAppBrowser, isStandalone } from '../lib
 // sulla schermata Home. Scenari gestiti:
 //  - Android con prompt nativo (beforeinstallprompt) → pulsante "Installa"
 //  - Android senza prompt (Firefox, o app già installata ma aperta nel browser) → istruzioni manuali
-//  - iOS → istruzioni "Condividi → Aggiungi alla schermata Home" + manifest
-//    dinamico con start_url = URL corrente (lo storage della webapp installata
-//    su iOS è separato da Safari: i dati rientrano dai parametri del QR)
+//  - iOS → istruzioni "Condividi → Aggiungi alla schermata Home"; su iOS il
+//    manifest non viene proprio emesso (vedi script in index.html) così la
+//    webapp installata riparte dall'URL con i parametri del QR (lo storage
+//    su iOS è separato da Safari)
 //  - Browser in-app (Instagram/Facebook/...) → l'installazione è impossibile,
 //    istruzioni per aprire il link nel browser vero
 // Desktop, app installata e modalità dev (?dev=...) non vengono bloccati.
@@ -40,28 +41,6 @@ export default function InstallGate() {
       window.removeEventListener('bip-ready', onBip);
       window.removeEventListener('appinstalled', onInstalled);
     };
-  }, [active]);
-
-  useEffect(() => {
-    if (!active || !isIOS) return;
-    const link = document.querySelector('link[rel="manifest"]');
-    if (!link) return;
-    const abs = p => window.location.origin + p;
-    const manifest = {
-      name: 'Push&Go — Ordina le tue lenti',
-      short_name: 'Push&Go',
-      lang: 'it',
-      start_url: window.location.href,
-      scope: window.location.origin + '/',
-      display: 'standalone',
-      background_color: '#FFFFFF',
-      theme_color: '#2563eb',
-      icons: [
-        { src: abs('/icon-192.png'), sizes: '192x192', type: 'image/png' },
-        { src: abs('/icon-512.png'), sizes: '512x512', type: 'image/png' },
-      ],
-    };
-    link.setAttribute('href', 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(manifest)));
   }, [active]);
 
   if (!active) return null;
