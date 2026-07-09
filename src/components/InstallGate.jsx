@@ -16,6 +16,7 @@ export default function InstallGate() {
   const [bip, setBip] = useState(window.__bipEvent || null);
   const [installed, setInstalled] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [closeTried, setCloseTried] = useState(false);
   // Su Android beforeinstallprompt arriva 1-2s dopo il load: senza attesa si
   // vedrebbero le istruzioni manuali per un attimo e poi il pulsante (flash)
   const [bipTimedOut, setBipTimedOut] = useState(false);
@@ -96,9 +97,20 @@ export default function InstallGate() {
       <>
         <div className="text-green-500 text-5xl mb-3">✓</div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">App installata!</h2>
-        <p className="text-gray-600 text-sm">
+        <p className="text-gray-600 text-sm mb-6">
           Ora apri <strong>Push&Go</strong> dalla schermata Home del tuo telefono per continuare.
         </p>
+        <button
+          onClick={() => { window.close(); setTimeout(() => setCloseTried(true), 400); }}
+          className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg shadow hover:bg-blue-700">
+          Chiudi
+        </button>
+        {closeTried && (
+          // window.close() negato dal browser (scheda non aperta da script)
+          <p className="text-xs text-gray-400 mt-3">
+            Il browser non permette la chiusura automatica: chiudi pure questa scheda manualmente.
+          </p>
+        )}
       </>
     );
   } else if (isInAppBrowser) {
