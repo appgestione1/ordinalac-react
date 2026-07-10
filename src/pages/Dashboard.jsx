@@ -49,6 +49,13 @@ function EyeParams({ eye }) {
 
 const EMPTY_EYE_FORM = { manufacturer: '', model: '', type: '', pwr: '', cyl: '', axis: '', add: '' };
 
+// Etichetta modello di un lens_order: unico se uguale per i due occhi, altrimenti OD/OS
+function lensModelLabel(l) {
+  const mod = l.od?.model || l.model || '';
+  const mos = l.os?.model || l.model || '';
+  return mod === mos ? mod : `OD ${mod || '—'} · OS ${mos || '—'}`;
+}
+
 // ── Componente LensEyeForm (ottico compila prescrizione) ─────────────
 function LensEyeForm({ label, color, lensData, ranges, value, onChange }) {
   const models = lensData && value.manufacturer ? Object.keys(lensData[value.manufacturer] || {}) : [];
@@ -585,7 +592,7 @@ function OrderCard({ order, onStatusChange, onDelete, onSupply }) {
 
       <div className="bg-gray-50 p-3 rounded border border-gray-100 text-sm">
         <div className="flex justify-between items-center mb-2 gap-2 flex-wrap">
-          <span className="font-bold">{l.manufacturer} {l.model}</span>
+          <span className="font-bold">{l.manufacturer} {lensModelLabel(l)}</span>
           {hasSupply
             ? <span className={`px-2 py-1 rounded text-xs font-bold ${supplyDest === 'client' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
                 {supplyDest === 'client' ? '🟣 Fornitura: CLIENTE' : '🟠 Fornitura: NEGOZIO'}
@@ -610,6 +617,12 @@ function OrderCard({ order, onStatusChange, onDelete, onSupply }) {
             <span className="font-bold ml-2 bg-white border px-1 rounded text-xs">{l.os?.qty||1}pz</span>
           </div>
         </div>
+        {l.total != null && (
+          <div className="flex justify-between items-center pt-2 mt-2 border-t border-gray-200">
+            <span className="font-bold text-gray-700 text-xs uppercase">Totale</span>
+            <span className="font-bold text-blue-700">€ {Number(l.total).toFixed(2).replace('.', ',')}</span>
+          </div>
+        )}
       </div>
 
       {order.client_info?.phone && (

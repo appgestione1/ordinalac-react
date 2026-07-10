@@ -178,6 +178,7 @@ Il produttore resta comune ai due occhi, ma il **modello (e quindi tipo/diottrie
 - **ClientApp**: select "Modello Lente" dentro ogni `EyeConfig` (tab La tua Lente), tolto il select condiviso; `typesFor(eye)`/`rangesFor(eye)`; prezzi per occhio con chiave `manuf::eye.model::type`; action view mostra il modello nella riga dettagli occhio solo se i due differiscono; localStorage: `modelOD`/`modelOS` (+ `model` legacy).
 - **Dashboard**: select Modello per occhio dentro `LensEyeForm` (ClientModal e RequestModal), tolti i select condivisi; `buildQrUrl` emette `mdos`; stampa ordine con colonna Modello per occhio; "Genera QR" richiede entrambi i modelli.
 - Verifica Playwright 14/14: selezione per occhio, prezzi/totale con modelli diversi, QR con `mdos`, QR legacy senza `mdos`.
+- **Fix viste ottico/admin** (stesso giorno): helper `lensModelLabel(l)` (unico se OD=OS, altrimenti "OD … · OS …") usato in Dashboard OrderCard e in SuperAdmin (forniture, lista/dettaglio clienti, storico prescrizioni e ordini); la **card ordine in Dashboard ora mostra il Totale** (`lens_order.total`) quando presente. E2E Dashboard 14/14 con ottico di prova reale (login, card ordine, Nuovo Cliente/QR con modelli per occhio, RequestModal → `new_data` con `od.model`/`os.model` verificato su Firestore, Listino) — account e dati di prova eliminati (tranne 1 change_request completata orfana: le regole non permettono delete).
 
 ## Auto-aggiornamento PWA + settings real-time (10/07/2026)
 

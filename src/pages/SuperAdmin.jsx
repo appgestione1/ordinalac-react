@@ -7,6 +7,13 @@ import { auth, db } from '../firebase';
 // Per cambiarla: creare un nuovo utente Firebase Auth e aggiornare questa costante
 const SUPERADMIN_EMAIL = 'solevista@gmail.com';
 
+// Etichetta modello di un lens_order: unico se uguale per i due occhi, altrimenti OD/OS
+function lensModelLabel(l) {
+  const mod = l.od?.model || l.model || '';
+  const mos = l.os?.model || l.model || '';
+  return mod === mos ? mod : `OD ${mod || '—'} · OS ${mos || '—'}`;
+}
+
 // ── Login (solo password, email nascosta) ─────────────────────────────
 function LoginView() {
   const [password, setPassword] = useState('');
@@ -668,7 +675,7 @@ function FornitureTab() {
                   {/* Lente */}
                   <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-1">Lente</p>
-                    <p className="font-semibold text-gray-800">{l.manufacturer} {l.model}</p>
+                    <p className="font-semibold text-gray-800">{l.manufacturer} {lensModelLabel(l)}</p>
                     <p className="text-xs text-gray-600 mt-1">
                       <span className="font-bold text-blue-600">OD</span> {l.od?.type || '—'}
                       {l.od?.pwr  && ` · Sf.${l.od.pwr}`}
@@ -866,7 +873,7 @@ function ClientiTab() {
                     }}
                       className={`w-full text-left px-3 py-3 border-b border-gray-50 transition ${selClient === c ? 'bg-indigo-50 border-l-4 border-l-indigo-500' : 'hover:bg-gray-50'}`}>
                       <p className={`text-sm font-semibold truncate ${selClient === c ? 'text-indigo-700' : 'text-gray-800'}`}>{c.patient_name || '—'}</p>
-                      <p className="text-xs text-gray-500 truncate">{l.manufacturer} {l.model}</p>
+                      <p className="text-xs text-gray-500 truncate">{l.manufacturer} {lensModelLabel(l)}</p>
                       {c.client_info?.phone && <p className="text-xs text-gray-400">{c.client_info.phone}</p>}
                       <p className="text-xs text-gray-300 mt-0.5">{c.orders?.length || 1} ordine/i</p>
                     </button>
@@ -932,7 +939,7 @@ function ClientiTab() {
                 <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
                   <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Prescrizione Lenti</h4>
                   <p className="text-sm font-bold text-gray-800 mb-2">
-                    {(lens2.manufacturer || l.manufacturer)} {(lens2.model || l.model)}
+                    {(lens2.manufacturer || l.manufacturer)} {lensModelLabel(lens2.manufacturer ? lens2 : l)}
                   </p>
                   <div className="space-y-1.5">
                     <EyeRow label="OD" eye={lens2.od || l.od} color="text-blue-600" />
@@ -962,7 +969,7 @@ function ClientiTab() {
                                   {h.updated_by === 'optician' ? 'da ottico' : 'dal cliente'}
                                 </span>
                               </div>
-                              <p className="font-bold text-gray-700">{h.manufacturer} {h.model}</p>
+                              <p className="font-bold text-gray-700">{h.manufacturer} {lensModelLabel(h)}</p>
                               <div className="mt-1 space-y-0.5">
                                 <EyeRow label="OD" eye={h.od} color="text-blue-600" />
                                 <EyeRow label="OS" eye={h.os} color="text-green-600" />
@@ -988,7 +995,7 @@ function ClientiTab() {
                         return (
                           <div key={i} className="flex justify-between items-center text-xs bg-white border border-gray-100 rounded-lg px-3 py-2">
                             <span className="text-gray-600">{date}</span>
-                            <span className="text-gray-700">{sl.manufacturer} {sl.model}</span>
+                            <span className="text-gray-700">{sl.manufacturer} {lensModelLabel(sl)}</span>
                             <span className="font-semibold text-gray-800">{STATUS[o.status] || o.status}</span>
                           </div>
                         );
