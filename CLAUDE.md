@@ -161,6 +161,16 @@ Nel tab **Catalogo Master** ora si editano i range diottrici dalla UI (prima era
 - **Indirizzo di Consegna**: rimossa casella "N." (`addrNum` resta nello stato/localStorage per retrocompatibilità, ancora unito in `address` full), label "Via / Piazza" → "Via / Piazza e Civico" a tutta larghezza.
 - Verifiche Playwright: 7/7 (esci/indirizzo/dashboard smoke) + 3/3 end-to-end consegna disattivata (doc scritto e ripulito con account usa-e-getta).
 
+## Auto-aggiornamento PWA + settings real-time (10/07/2026)
+
+Problema segnalato dall'utente: l'app installata recepiva i deploy solo disinstallando/reinstallando, e il toggle consegna a domicilio non era in tempo reale. Tre cause e tre fix:
+
+1. **Firebase Hosting serviva index.html con cache 1h** (default senza `headers`) → in `firebase.json`: `/assets/**` = `max-age=31536000, immutable` (i nomi hanno l'hash), `**/*.@(html|json)` e `/sw.js` = `no-cache`.
+2. **L'app installata riprende dalla memoria senza mai ricaricare la pagina** → auto-update in `main.jsx`: `vite.config.js` genera `__BUILD_ID__` (define) e scrive `dist/version.json` a ogni build (plugin `write-version-json`); in PROD a ogni avvio e a ogni `visibilitychange→visible` l'app fa fetch no-store di `/version.json` e se la build è diversa fa `location.reload()` (guard sessionStorage `pushgo_reloaded_for` contro i loop se il CDN è indietro).
+3. **`home_delivery` letto una volta con getDoc** → ora `onSnapshot` su `optician_config/{oid}/settings/main` in `fetchLensData` (unsub in `settingsUnsub`, pulito allo smontaggio): se l'ottico disattiva mentre l'app è aperta il toggle sparisce in tempo reale e delivery torna pickup.
+
+NB: le app installate PRIMA di questo deploy non hanno il codice di auto-update → per quelle serve ancora un refresh/reinstallazione manuale una tantum; dai deploy successivi l'aggiornamento è automatico alla riapertura.
+
 ## TODO aperti
 
 1. Pagamenti digitali (tab "Pagamento" nella ClientApp è ancora placeholder "disponibile a breve"; quando pronta, i dati di pagamento andranno richiesti al primo ordine — nota già presente nella tab)

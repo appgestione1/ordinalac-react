@@ -100,6 +100,7 @@ export default function ClientApp() {
   const [changeReqPending, setChangeReqPending] = useState(false);
   const [changeReqDone, setChangeReqDone]       = useState(false);
   const changeReqUnsub = useRef(null);
+  const settingsUnsub  = useRef(null);
 
   const models = lensData && manufacturer ? Object.keys(lensData[manufacturer] || {}) : [];
   const types  = lensData && manufacturer && model ? lensData[manufacturer]?.[model] || [] : [];
@@ -196,6 +197,7 @@ export default function ClientApp() {
     return () => {
       mounted = false;
       if (changeReqUnsub.current) changeReqUnsub.current();
+      if (settingsUnsub.current) settingsUnsub.current();
     };
   }, []);
 
@@ -336,14 +338,18 @@ export default function ClientApp() {
     getDoc(doc(db, 'catalogs', 'master'))
       .then(s => { if (s.exists()) setMasterRanges(s.data().ranges || {}); })
       .catch(() => {});
-    // Impostazioni ottico: consegna a domicilio attiva?
-    getDoc(doc(db, 'optician_config', oid, 'settings', 'main'))
-      .then(s => {
+    // Impostazioni ottico: consegna a domicilio attiva? (real-time: se l'ottico
+    // la disattiva mentre l'app è aperta, il toggle sparisce subito)
+    if (settingsUnsub.current) settingsUnsub.current();
+    settingsUnsub.current = onSnapshot(
+      doc(db, 'optician_config', oid, 'settings', 'main'),
+      s => {
         const enabled = !(s.exists() && s.data().home_delivery === false);
         setHomeDelivery(enabled);
         if (!enabled) { setDelivery('pickup'); lss('delivery', 'pickup'); }
-      })
-      .catch(() => {});
+      },
+      () => {}
+    );
     try {
       const snap = await getDoc(doc(db, 'optician_config', oid, 'lenses', 'main'));
       if (snap.exists()) { setLensData(snap.data().data); return snap.data().data; }
