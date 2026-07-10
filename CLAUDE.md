@@ -169,6 +169,16 @@ Nel tab **Catalogo Master** ora si editano i range diottrici dalla UI (prima era
 - L'ordine ora salva anche i prezzi: `lens_order.od/os.price`, `lens_order.total`, e righe "Prezzo: €…" + "TOTALE: €…" nel message.
 - Dev fixture con prezzi finti (`DEV_PRICING`). Verifica Playwright 12/12, incluso cambio prezzo su Firestore con app aperta → aggiornato in tempo reale.
 
+## Modello lente per occhio (10/07/2026)
+
+Il produttore resta comune ai due occhi, ma il **modello (e quindi tipo/diottrie) può differire tra OD e OS**:
+
+- **Dato**: gli oggetti occhio (`od`/`os`) ora hanno un campo `model`. Il campo `model` top-level (localStorage, `lens_order`, `client_profiles.lens`, `change_requests`) resta come **legacy = modello OD** per compatibilità; in lettura ovunque si usa `od.model || model`.
+- **QR**: nuovo param `mdos` (modello OS); `md` = modello OD e fallback per QR vecchi (inclusi quelli generati da VisionConsole/PushGo.js, che imposta lo stesso modello per entrambi).
+- **ClientApp**: select "Modello Lente" dentro ogni `EyeConfig` (tab La tua Lente), tolto il select condiviso; `typesFor(eye)`/`rangesFor(eye)`; prezzi per occhio con chiave `manuf::eye.model::type`; action view mostra il modello nella riga dettagli occhio solo se i due differiscono; localStorage: `modelOD`/`modelOS` (+ `model` legacy).
+- **Dashboard**: select Modello per occhio dentro `LensEyeForm` (ClientModal e RequestModal), tolti i select condivisi; `buildQrUrl` emette `mdos`; stampa ordine con colonna Modello per occhio; "Genera QR" richiede entrambi i modelli.
+- Verifica Playwright 14/14: selezione per occhio, prezzi/totale con modelli diversi, QR con `mdos`, QR legacy senza `mdos`.
+
 ## Auto-aggiornamento PWA + settings real-time (10/07/2026)
 
 Problema segnalato dall'utente: l'app installata recepiva i deploy solo disinstallando/reinstallando, e il toggle consegna a domicilio non era in tempo reale. Tre cause e tre fix:

@@ -24,7 +24,9 @@ const LS = {
   privacy: 'otticoApp_privacy_accepted',
   opticianId: 'otticoApp_optician_id',
   manufacturer: 'otticoApp_lens_manufacturer',
-  model: 'otticoApp_lens_model',
+  model: 'otticoApp_lens_model', // legacy: modello unico (fallback per dati salvati prima del modello per occhio)
+  modelOD: 'otticoApp_lens_model_od',
+  modelOS: 'otticoApp_lens_model_os',
   qtyOD: 'otticoApp_qty_od',
   qtyOS: 'otticoApp_qty_os',
   typeOD: 'otticoApp_lens_type_od',
@@ -50,7 +52,7 @@ function buildEyeParams(e) {
   return { line: parts.join(' '), add: e.add };
 }
 
-const EMPTY_EYE = { qty: '1', type: '', pwr: '', cyl: '', axis: '', add: '' };
+const EMPTY_EYE = { qty: '1', model: '', type: '', pwr: '', cyl: '', axis: '', add: '' };
 
 // Anagrafica obbligatoria: senza questi dati (+ privacy) non si accede alla action view
 const storedProfileComplete = () =>
@@ -84,9 +86,8 @@ export default function ClientApp() {
   const [addrCity, setAddrCity]     = useState('');
   const [addrProv, setAddrProv]     = useState('');
 
-  // Lenti
+  // Lenti (produttore comune, modello per occhio dentro od/os)
   const [manufacturer, setManufacturer] = useState('');
-  const [model, setModel]               = useState('');
   const [od, setOd] = useState(EMPTY_EYE);
   const [os, setOs] = useState(EMPTY_EYE);
 
@@ -105,24 +106,28 @@ export default function ClientApp() {
   const lensUnsub      = useRef(null);
 
   const models = lensData && manufacturer ? Object.keys(lensData[manufacturer] || {}) : [];
-  const types  = lensData && manufacturer && model ? lensData[manufacturer]?.[model] || [] : [];
-  const rangesByType = {};
-  if (masterRanges) for (const t of types) {
-    const r = getRange(masterRanges, manufacturer, model, t);
-    if (r) rangesByType[t] = r;
-  }
+  // Tipi e range per occhio: il modello può differire tra OD e OS
+  const typesFor = eye => (lensData && manufacturer && eye.model ? lensData[manufacturer]?.[eye.model] || [] : []);
+  const rangesFor = eye => {
+    const out = {};
+    if (masterRanges) for (const t of typesFor(eye)) {
+      const r = getRange(masterRanges, manufacturer, eye.model, t);
+      if (r) out[t] = r;
+    }
+    return out;
+  };
 
   function listenChangeReq(reqId) {
     if (changeReqUnsub.current) changeReqUnsub.current();
     changeReqUnsub.current = onSnapshot(doc(db, 'change_requests', reqId), snap => {
       if (!snap.exists() || snap.data().status !== 'completed') return;
       const nd = snap.data().new_data || {};
-      const newOd = { qty: ls('qtyOD') || '1', type: nd.od?.type || '', pwr: nd.od?.pwr || '', cyl: nd.od?.cyl || '', axis: nd.od?.axis || '', add: nd.od?.add || '' };
-      const newOs = { qty: ls('qtyOS') || '1', type: nd.os?.type || '', pwr: nd.os?.pwr || '', cyl: nd.os?.cyl || '', axis: nd.os?.axis || '', add: nd.os?.add || '' };
+      const newOd = { qty: ls('qtyOD') || '1', model: nd.od?.model || nd.model || '', type: nd.od?.type || '', pwr: nd.od?.pwr || '', cyl: nd.od?.cyl || '', axis: nd.od?.axis || '', add: nd.od?.add || '' };
+      const newOs = { qty: ls('qtyOS') || '1', model: nd.os?.model || nd.model || '', type: nd.os?.type || '', pwr: nd.os?.pwr || '', cyl: nd.os?.cyl || '', axis: nd.os?.axis || '', add: nd.os?.add || '' };
       setManufacturer(nd.manufacturer || '');
-      setModel(nd.model || '');
       setOd(newOd); setOs(newOs);
-      lss('manufacturer', nd.manufacturer || ''); lss('model', nd.model || '');
+      lss('manufacturer', nd.manufacturer || ''); lss('model', newOd.model);
+      lss('modelOD', newOd.model); lss('modelOS', newOs.model);
       lss('typeOD', newOd.type); lss('pwrOD', newOd.pwr); lss('cylOD', newOd.cyl); lss('axisOD', newOd.axis); lss('addOD', newOd.add);
       lss('typeOS', newOs.type); lss('pwrOS', newOs.pwr); lss('cylOS', newOs.cyl); lss('axisOS', newOs.axis); lss('addOS', newOs.add);
       lss('changeReqId', '');
@@ -138,7 +143,7 @@ export default function ClientApp() {
       if (uid && oid) {
         const newLens = {
           manufacturer: nd.manufacturer || '',
-          model:        nd.model || '',
+          model:        nd.od?.model || nd.model || '',
           od:           nd.od || {},
           os:           nd.os || {},
         };
@@ -171,7 +176,7 @@ export default function ClientApp() {
         client_email: email || null,
         status:       'pending',
         created_at:   serverTimestamp(),
-        current_data: { manufacturer, model, od, os },
+        current_data: { manufacturer, model: od.model, od, os },
       });
       lss('changeReqId', docRef.id);
       setChangeReqPending(true);
@@ -210,13 +215,18 @@ export default function ClientApp() {
 
     // Modalità sviluppo: /?dev=1 (settings) | /?dev=action
     const DEV_LENSDATA = {
-      'DAILIES': { 'DAILIES TOTAL1': ['Giornaliera Sferica', 'Giornaliera Torica', 'Giornaliera Multifocale'] },
+      'DAILIES': {
+        'DAILIES TOTAL1': ['Giornaliera Sferica', 'Giornaliera Torica', 'Giornaliera Multifocale'],
+        'DAILIES AquaComfort Plus': ['Giornaliera Sferica', 'Giornaliera Torica'],
+      },
       'ACUVUE': { 'ACUVUE OASYS MAX 1-Day': ['Giornaliera Sferica', 'Giornaliera Torica', 'Giornaliera Multifocale'] },
     };
     const DEV_PRICING = {
-      'DAILIES::DAILIES TOTAL1::Giornaliera Sferica':     { enabled: true, price: '32.50' },
-      'DAILIES::DAILIES TOTAL1::Giornaliera Torica':      { enabled: true, price: '39.90' },
-      'DAILIES::DAILIES TOTAL1::Giornaliera Multifocale': { enabled: true, price: '45.00' },
+      'DAILIES::DAILIES TOTAL1::Giornaliera Sferica':               { enabled: true, price: '32.50' },
+      'DAILIES::DAILIES TOTAL1::Giornaliera Torica':                { enabled: true, price: '39.90' },
+      'DAILIES::DAILIES TOTAL1::Giornaliera Multifocale':           { enabled: true, price: '45.00' },
+      'DAILIES::DAILIES AquaComfort Plus::Giornaliera Sferica':     { enabled: true, price: '19.90' },
+      'DAILIES::DAILIES AquaComfort Plus::Giornaliera Torica':      { enabled: true, price: '24.90' },
     };
     if (params.get('dev') === '1') {
       setName('Mario Rossi'); setPhone('3331234567');
@@ -224,9 +234,9 @@ export default function ClientApp() {
       setPrivacy(true);
       setLensData(DEV_LENSDATA);
       setPricing(DEV_PRICING);
-      setManufacturer('DAILIES'); setModel('DAILIES TOTAL1');
-      setOd({ qty: '1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
-      setOs({ qty: '1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
+      setManufacturer('DAILIES');
+      setOd({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
+      setOs({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
       getDoc(doc(db, 'catalogs', 'master'))
         .then(s => { if (s.exists()) setMasterRanges(s.data().ranges || {}); })
         .catch(() => {});
@@ -238,9 +248,9 @@ export default function ClientApp() {
       setName('Mario Rossi'); setPhone('3331234567');
       setLensData(DEV_LENSDATA);
       setPricing(DEV_PRICING);
-      setOd({ qty: '1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
-      setOs({ qty: '1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
-      setManufacturer('DAILIES'); setModel('DAILIES TOTAL1');
+      setOd({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
+      setOs({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
+      setManufacturer('DAILIES');
       setDelivery('pickup');
       setView('action');
       return;
@@ -261,7 +271,7 @@ export default function ClientApp() {
         ph: params.get('ph') || '', e: params.get('e') || '', cf: params.get('cf') || '',
         sa: params.get('sa') || '', sc: params.get('sc') || '',
         sz: params.get('sz') || '', sp: params.get('sp') || '',
-        m: params.get('m') || '', md: params.get('md') || '',
+        m: params.get('m') || '', md: params.get('md') || '', mdos: params.get('mdos') || '',
         tod: params.get('tod') || '', pod: params.get('pod') || '',
         cod: params.get('cod') || '', aod: params.get('aod') || '', addod: params.get('addod') || '',
         tos: params.get('tos') || '', pos: params.get('pos') || '',
@@ -289,10 +299,11 @@ export default function ClientApp() {
     setAddrStreet(qr.sa); setAddrCity(qr.sc); setAddrCap(qr.sz); setAddrProv(qr.sp);
     setDelivery('pickup');
     setOpticianId(qr.oid);
-    setManufacturer(qr.m); setModel(qr.md);
+    setManufacturer(qr.m);
 
-    const newOd = { qty: '1', type: qr.tod, pwr: qr.pod, cyl: qr.cod, axis: qr.aod, add: qr.addod };
-    const newOs = { qty: '1', type: qr.tos, pwr: qr.pos, cyl: qr.cos, axis: qr.aos, add: qr.addos };
+    // md = modello OD (e legacy per QR vecchi), mdos = modello OS (fallback md)
+    const newOd = { qty: '1', model: qr.md, type: qr.tod, pwr: qr.pod, cyl: qr.cod, axis: qr.aod, add: qr.addod };
+    const newOs = { qty: '1', model: qr.mdos || qr.md, type: qr.tos, pwr: qr.pos, cyl: qr.cos, axis: qr.aos, add: qr.addos };
     setOd(newOd); setOs(newOs);
 
     // Salva tutto in localStorage (inclusi parametri lenti)
@@ -300,6 +311,7 @@ export default function ClientApp() {
     lss('addrStreet', qr.sa); lss('addrCity', qr.sc); lss('addrCap', qr.sz); lss('addrProv', qr.sp);
     lss('delivery', 'pickup'); lss('opticianId', qr.oid);
     lss('manufacturer', qr.m); lss('model', qr.md);
+    lss('modelOD', newOd.model); lss('modelOS', newOs.model);
     lss('typeOD', qr.tod); lss('pwrOD', qr.pod); lss('cylOD', qr.cod); lss('axisOD', qr.aod); lss('addOD', qr.addod);
     lss('typeOS', qr.tos); lss('pwrOS', qr.pos); lss('cylOS', qr.cos); lss('axisOS', qr.aos); lss('addOS', qr.addos);
 
@@ -316,15 +328,16 @@ export default function ClientApp() {
     setAddrCap(ls('addrCap')); setAddrCity(ls('addrCity')); setAddrProv(ls('addrProv'));
     setPrivacy(ls('privacy') === 'true');
     setOpticianId(savedId);
-    setManufacturer(ls('manufacturer')); setModel(ls('model'));
+    setManufacturer(ls('manufacturer'));
 
     // FIX: ripristina tutti i parametri lenti da localStorage
+    // (modello per occhio, con fallback al vecchio modello unico)
     setOd({
-      qty: ls('qtyOD') || '1', type: ls('typeOD'),
+      qty: ls('qtyOD') || '1', model: ls('modelOD') || ls('model'), type: ls('typeOD'),
       pwr: ls('pwrOD'), cyl: ls('cylOD'), axis: ls('axisOD'), add: ls('addOD'),
     });
     setOs({
-      qty: ls('qtyOS') || '1', type: ls('typeOS'),
+      qty: ls('qtyOS') || '1', model: ls('modelOS') || ls('model'), type: ls('typeOS'),
       pwr: ls('pwrOS'), cyl: ls('cylOS'), axis: ls('axisOS'), add: ls('addOS'),
     });
     setQuickQtyOD(ls('qtyOD') || '1');
@@ -434,7 +447,8 @@ export default function ClientApp() {
     lss('addrCap', addrCap); lss('addrCity', addrCity); lss('addrProv', addrProv);
     lss('address', addrFull); lss('privacy', 'true');
     lss('delivery', delivery); lss('opticianId', opticianId);
-    lss('manufacturer', manufacturer); lss('model', model);
+    lss('manufacturer', manufacturer); lss('model', od.model);
+    lss('modelOD', od.model); lss('modelOS', os.model);
     lss('qtyOD', od.qty); lss('typeOD', od.type);
     lss('pwrOD', od.pwr); lss('cylOD', od.cyl); lss('axisOD', od.axis); lss('addOD', od.add);
     lss('qtyOS', os.qty); lss('typeOS', os.type);
@@ -447,7 +461,7 @@ export default function ClientApp() {
         name: cleanName, phone: cleanPhone, email: cleanEmail, cf: cleanCf,
         optician_id: opticianId,
         address: { street: addrStreet, num: addrNum, cap: addrCap, city: addrCity, province: addrProv, full: addrFull },
-        lens: { manufacturer, model, od, os },
+        lens: { manufacturer, model: od.model, od, os },
         privacy_accepted: true,
         updated_at: serverTimestamp(),
       }, { merge: true }).catch(() => {});
@@ -477,12 +491,12 @@ export default function ClientApp() {
     msg += delivery === 'delivery'
       ? `**CONSEGNA A DOMICILIO**\n${addrFull}\n`
       : `**RITIRO IN NEGOZIO**\n`;
-    msg += `\n--- ORDINE LENTI ---\nOrdine: ${manufacturer} ${model}\n\n`;
-    msg += `OCCHIO DESTRO [${quickQtyOD} pz.]\nTipo: ${od.type || 'N/D'}\n`;
+    msg += `\n--- ORDINE LENTI ---\nOrdine: ${manufacturer}\n\n`;
+    msg += `OCCHIO DESTRO [${quickQtyOD} pz.]\nModello: ${od.model || 'N/D'}\nTipo: ${od.type || 'N/D'}\n`;
     if (odParams.line) msg += odParams.line + '\n';
     if (odParams.add)  msg += `ADD: ${odParams.add}\n`;
     if (priceOD !== null) msg += `Prezzo: ${fmtEur(priceOD)}/pz.\n`;
-    msg += `\nOCCHIO SINISTRO [${quickQtyOS} pz.]\nTipo: ${os.type || 'N/D'}\n`;
+    msg += `\nOCCHIO SINISTRO [${quickQtyOS} pz.]\nModello: ${os.model || 'N/D'}\nTipo: ${os.type || 'N/D'}\n`;
     if (osParams.line) msg += osParams.line + '\n';
     if (osParams.add)  msg += `ADD: ${osParams.add}\n`;
     if (priceOS !== null) msg += `Prezzo: ${fmtEur(priceOS)}/pz.\n`;
@@ -506,9 +520,9 @@ export default function ClientApp() {
           },
         },
         lens_order: {
-          manufacturer, model,
-          od: { qty: quickQtyOD, type: od.type, pwr: od.pwr, cyl: od.cyl, axis: od.axis, add: od.add, price: priceOD },
-          os: { qty: quickQtyOS, type: os.type, pwr: os.pwr, cyl: os.cyl, axis: os.axis, add: os.add, price: priceOS },
+          manufacturer, model: od.model,
+          od: { qty: quickQtyOD, model: od.model, type: od.type, pwr: od.pwr, cyl: od.cyl, axis: od.axis, add: od.add, price: priceOD },
+          os: { qty: quickQtyOS, model: os.model, type: os.type, pwr: os.pwr, cyl: os.cyl, axis: os.axis, add: os.add, price: priceOS },
           total: showTotal ? Math.round(orderTotal * 100) / 100 : null,
         },
       });
@@ -524,7 +538,7 @@ export default function ClientApp() {
           name, phone: cleanPhone, email, cf,
           optician_id: opticianId,
           address: { street: addrStreet, num: addrNum, cap: addrCap, city: addrCity, province: addrProv, full: addrFull },
-          lens: { manufacturer, model, od, os },
+          lens: { manufacturer, model: od.model, od, os },
           privacy_accepted: true,
           updated_at: serverTimestamp(),
         }, { merge: true }).catch(err => console.error('client_profiles write error:', err));
@@ -543,7 +557,7 @@ export default function ClientApp() {
 
   // Prezzi dal listino ottico (aggiornati in real-time via onSnapshot)
   const eyePrice = eye => {
-    const raw = pricing?.[`${manufacturer}::${model}::${eye.type}`]?.price;
+    const raw = pricing?.[`${manufacturer}::${eye.model}::${eye.type}`]?.price;
     const n = parseFloat(raw);
     return Number.isFinite(n) && n > 0 ? n : null;
   };
@@ -742,7 +756,7 @@ export default function ClientApp() {
                 </div>
               ) : (
                 <select value={manufacturer} disabled={!lensData}
-                  onChange={e => { setManufacturer(e.target.value); setModel(''); setOd(o => ({ ...o, type: '' })); setOs(o => ({ ...o, type: '' })); }}
+                  onChange={e => { setManufacturer(e.target.value); setOd(o => ({ ...o, model: '', type: '' })); setOs(o => ({ ...o, model: '', type: '' })); }}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white disabled:cursor-not-allowed">
                   <option value="">-- Seleziona Produttore --</option>
                   {lensData && Object.keys(lensData).map(m => <option key={m} value={m}>{m}</option>)}
@@ -750,24 +764,9 @@ export default function ClientApp() {
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Modello Lente</label>
-              {lensLocked ? (
-                <div className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-700 text-sm min-h-[42px]">
-                  {model || <span className="text-gray-400 italic">Non specificato</span>}
-                </div>
-              ) : (
-                <select value={model} disabled={!manufacturer}
-                  onChange={e => { setModel(e.target.value); setOd(o => ({ ...o, type: '' })); setOs(o => ({ ...o, type: '' })); }}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white disabled:cursor-not-allowed">
-                  <option value="">-- Seleziona Modello --</option>
-                  {models.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              )}
-            </div>
-
-            <EyeConfig eye="od" label="OCCHIO DESTRO"  types={types} values={od} locked={lensLocked} rangesByType={rangesByType} priceLabel={priceOD !== null ? `${fmtEur(priceOD)}/pz.` : null} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
-            <EyeConfig eye="os" label="OCCHIO SINISTRO" types={types} values={os} locked={lensLocked} rangesByType={rangesByType} priceLabel={priceOS !== null ? `${fmtEur(priceOS)}/pz.` : null} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
+            {/* Il modello può variare tra occhio destro e sinistro: select dentro ogni occhio */}
+            <EyeConfig eye="od" label="OCCHIO DESTRO"  models={models} types={typesFor(od)} values={od} locked={lensLocked} rangesByType={rangesFor(od)} priceLabel={priceOD !== null ? `${fmtEur(priceOD)}/pz.` : null} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
+            <EyeConfig eye="os" label="OCCHIO SINISTRO" models={models} types={typesFor(os)} values={os} locked={lensLocked} rangesByType={rangesFor(os)} priceLabel={priceOS !== null ? `${fmtEur(priceOS)}/pz.` : null} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
 
             {/* Richiesta modifica prescrizione (stessa funzione della action view) */}
             <div className="pt-2">{changeReqSection(true)}</div>
@@ -864,7 +863,9 @@ export default function ClientApp() {
               <p className="text-gray-600 text-sm">
                 {delivery === 'delivery' ? `📦 Consegna: ${ls('address')}` : '🏪 Ritiro in negozio'}
               </p>
-              <p className="text-gray-600 text-sm font-medium mt-1">{manufacturer} {model}</p>
+              <p className="text-gray-600 text-sm font-medium mt-1">
+                {manufacturer}{od.model && od.model === os.model ? ` ${od.model}` : ''}
+              </p>
 
               {/* OD */}
               <div className="flex justify-between items-center mt-3">
@@ -878,7 +879,7 @@ export default function ClientApp() {
                 </div>
               </div>
               <p className="text-gray-600 text-xs mt-1">
-                {od.type || 'N/D'}{odParams.line ? ' · ' + odParams.line : ''}{odParams.add ? ' · ADD ' + odParams.add : ''}
+                {od.model && od.model !== os.model ? od.model + ' · ' : ''}{od.type || 'N/D'}{odParams.line ? ' · ' + odParams.line : ''}{odParams.add ? ' · ADD ' + odParams.add : ''}
               </p>
 
               {/* OS */}
@@ -893,7 +894,7 @@ export default function ClientApp() {
                 </div>
               </div>
               <p className="text-gray-600 text-xs mt-1">
-                {os.type || 'N/D'}{osParams.line ? ' · ' + osParams.line : ''}{osParams.add ? ' · ADD ' + osParams.add : ''}
+                {os.model && os.model !== od.model ? os.model + ' · ' : ''}{os.type || 'N/D'}{osParams.line ? ' · ' + osParams.line : ''}{osParams.add ? ' · ADD ' + osParams.add : ''}
               </p>
 
               {/* Totale ordine (prezzi dal listino ottico, real-time) */}

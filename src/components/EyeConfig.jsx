@@ -1,8 +1,8 @@
 import ParamField from './ParamField';
 import { pwrOptions, cylOptions, axisOptions, addOptions } from '../lib/lensRanges';
 
-export default function EyeConfig({ eye, label, types, values, onChange, locked, rangesByType, priceLabel }) {
-  const { type, pwr, cyl, axis, add } = values;
+export default function EyeConfig({ eye, label, models, types, values, onChange, locked, rangesByType, priceLabel }) {
+  const { model, type, pwr, cyl, axis, add } = values;
   const t = type.toLowerCase();
 
   const showPwr = !!type && !t.includes('nessun');
@@ -23,10 +23,29 @@ export default function EyeConfig({ eye, label, types, values, onChange, locked,
         {priceLabel && <span className="text-sm font-bold text-blue-700">{priceLabel}</span>}
       </div>
       <div>
+        <label className="block text-sm font-medium text-gray-700">Modello Lente</label>
+        {locked ? (
+          <div className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-700 text-sm min-h-[42px]">
+            {model || <span className="text-gray-400 italic">Non specificato</span>}
+          </div>
+        ) : (
+          <select
+            value={model}
+            disabled={!models || models.length === 0}
+            onChange={e => onChange({ model: e.target.value, type: '', pwr: '', cyl: '', axis: '', add: '' })}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white disabled:cursor-not-allowed"
+          >
+            <option value="">-- Seleziona Modello --</option>
+            {(models || []).map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        )}
+      </div>
+
+      <div className="mt-3">
         <label className="block text-sm font-medium text-gray-700">Tipo Correzione</label>
         <select
           value={type}
-          disabled={locked}
+          disabled={locked || !model}
           onChange={e => onChange({ type: e.target.value, pwr: '', cyl: '', axis: '', add: '' })}
           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 disabled:cursor-not-allowed"
         >

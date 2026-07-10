@@ -27,7 +27,7 @@ function buildQrUrl(uid, form, od, os) {
     oid: uid,
     n: form.name, ph: form.phone, e: form.email, cf: form.cf,
     sa: form.street, sc: form.city, sz: form.cap, sp: form.prov,
-    m: od.manufacturer, md: od.model,
+    m: od.manufacturer, md: od.model, mdos: os.model,
     tod: od.type, pod: od.pwr, cod: od.cyl, aod: od.axis, addod: od.add,
     tos: os.type, pos: os.pwr, cos: os.cyl, aos: os.axis, addos: os.add,
   });
@@ -51,6 +51,7 @@ const EMPTY_EYE_FORM = { manufacturer: '', model: '', type: '', pwr: '', cyl: ''
 
 // ── Componente LensEyeForm (ottico compila prescrizione) ─────────────
 function LensEyeForm({ label, color, lensData, ranges, value, onChange }) {
+  const models = lensData && value.manufacturer ? Object.keys(lensData[value.manufacturer] || {}) : [];
   const types  = lensData && value.manufacturer && value.model ? lensData[value.manufacturer]?.[value.model] || [] : [];
   const t = (value.type || '').toLowerCase();
   const showPwr  = t && !t.includes('nessun');
@@ -67,6 +68,12 @@ function LensEyeForm({ label, color, lensData, ranges, value, onChange }) {
         {label}
       </div>
       <div className="mt-2 space-y-2">
+        <select value={value.model} disabled={!value.manufacturer}
+          onChange={e => onChange({ model: e.target.value, type: '', pwr: '', cyl: '', axis: '', add: '' })}
+          className={inputCls}>
+          <option value="">-- Modello Lente --</option>
+          {models.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
         <select value={value.type} disabled={!value.model}
           onChange={e => onChange({ type: e.target.value, pwr: '', cyl: '', axis: '', add: '' })}
           className={inputCls}>
@@ -638,10 +645,10 @@ function printOrder(order) {
     <style>body{font-family:sans-serif;padding:20px;} table{border-collapse:collapse;width:100%} td,th{border:1px solid #ddd;padding:8px;}</style>
     </head><body>
     <h2>Ordine Lenti — ${order.patient_name}</h2>
-    <p><b>Produttore:</b> ${l.manufacturer} ${l.model}</p>
-    <table><tr><th>Occhio</th><th>Tipo</th><th>PWR</th><th>CYL</th><th>AXIS</th><th>ADD</th><th>Qty</th></tr>
-    <tr><td>OD</td><td>${l.od?.type||'-'}</td><td>${l.od?.pwr||'-'}</td><td>${l.od?.cyl||'-'}</td><td>${l.od?.axis||'-'}</td><td>${l.od?.add||'-'}</td><td>${l.od?.qty||1}</td></tr>
-    <tr><td>OS</td><td>${l.os?.type||'-'}</td><td>${l.os?.pwr||'-'}</td><td>${l.os?.cyl||'-'}</td><td>${l.os?.axis||'-'}</td><td>${l.os?.add||'-'}</td><td>${l.os?.qty||1}</td></tr>
+    <p><b>Produttore:</b> ${l.manufacturer}</p>
+    <table><tr><th>Occhio</th><th>Modello</th><th>Tipo</th><th>PWR</th><th>CYL</th><th>AXIS</th><th>ADD</th><th>Qty</th></tr>
+    <tr><td>OD</td><td>${l.od?.model||l.model||'-'}</td><td>${l.od?.type||'-'}</td><td>${l.od?.pwr||'-'}</td><td>${l.od?.cyl||'-'}</td><td>${l.od?.axis||'-'}</td><td>${l.od?.add||'-'}</td><td>${l.od?.qty||1}</td></tr>
+    <tr><td>OS</td><td>${l.os?.model||l.model||'-'}</td><td>${l.os?.type||'-'}</td><td>${l.os?.pwr||'-'}</td><td>${l.os?.cyl||'-'}</td><td>${l.os?.axis||'-'}</td><td>${l.os?.add||'-'}</td><td>${l.os?.qty||1}</td></tr>
     </table>
     <p><b>Consegna:</b> ${order.delivery?.mode === 'delivery' ? order.delivery?.address_full : 'Ritiro in negozio'}</p>
     <script>window.print();window.close();<\/script></body></html>`);
@@ -655,11 +662,8 @@ function ClientModal({ uid, myLensData, ranges, onClose }) {
   const [form, setForm]   = useState({ name:'', cf:'', email:'', phone:'', street:'', city:'', cap:'', prov:'' });
   const [od, setOd]       = useState(EMPTY_EYE_FORM);
   const [os, setOs]       = useState(EMPTY_EYE_FORM);
-  const [lensManuf, setLensManuf] = useState('');
-  const [lensModel, setLensModel] = useState('');
+  const [lensManuf, setLensManuf] = useState(''); // produttore comune; modello per occhio in od/os
   const qrCanvasRef = useRef(null);
-
-  const models = myLensData && lensManuf ? Object.keys(myLensData[lensManuf] || {}) : [];
 
   function printQR() {
     const canvas = qrCanvasRef.current?.querySelector('canvas');
@@ -671,7 +675,7 @@ function ClientModal({ uid, myLensData, ranges, onClose }) {
       h2{margin:0 0 4px;font-size:18px;} p{margin:0 0 16px;color:#555;font-size:13px;} img{border:1px solid #eee;padding:8px;border-radius:8px;}</style>
       </head><body>
       <h2>${form.name}</h2>
-      <p>${lensManuf} ${lensModel}</p>
+      <p>${lensManuf} ${od.model === os.model ? od.model : `OD: ${od.model} / OS: ${os.model}`}</p>
       <img src="${dataUrl}" width="220" height="220" />
       <script>window.onload=function(){window.print();window.close();}<\/script>
       </body></html>`);
@@ -679,20 +683,15 @@ function ClientModal({ uid, myLensData, ranges, onClose }) {
   }
 
   function handleManufChange(m) {
-    setLensManuf(m); setLensModel('');
+    setLensManuf(m);
     setOd({ ...EMPTY_EYE_FORM, manufacturer: m });
     setOs({ ...EMPTY_EYE_FORM, manufacturer: m });
-  }
-  function handleModelChange(m) {
-    setLensModel(m);
-    setOd(o => ({ ...o, model: m, type: '', pwr: '', cyl: '', axis: '', add: '' }));
-    setOs(o => ({ ...o, model: m, type: '', pwr: '', cyl: '', axis: '', add: '' }));
   }
 
   function generateQR() {
     const url = buildQrUrl(uid, form,
-      { ...od, manufacturer: lensManuf, model: lensModel },
-      { ...os, manufacturer: lensManuf, model: lensModel }
+      { ...od, manufacturer: lensManuf },
+      { ...os, manufacturer: lensManuf }
     );
     setQrUrl(url); setStep('qr');
   }
@@ -758,33 +757,24 @@ function ClientModal({ uid, myLensData, ranges, onClose }) {
               {/* Prescrizione */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
                 <h4 className="text-sm font-bold text-indigo-600 uppercase tracking-wide mb-4">③ Prescrizione Lenti</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Produttore</label>
-                    <select value={lensManuf} onChange={e => handleManufChange(e.target.value)}
-                      className="block w-full rounded-md border border-gray-300 shadow-sm text-sm py-2 pl-3">
-                      <option value="">-- Seleziona --</option>
-                      {Object.keys(myLensData).map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Modello</label>
-                    <select value={lensModel} disabled={!lensManuf} onChange={e => handleModelChange(e.target.value)}
-                      className="block w-full rounded-md border border-gray-300 shadow-sm text-sm py-2 pl-3 disabled:bg-gray-100">
-                      <option value="">-- --</option>
-                      {models.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </div>
+                <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Produttore (comune ai due occhi)</label>
+                  <select value={lensManuf} onChange={e => handleManufChange(e.target.value)}
+                    className="block w-full rounded-md border border-gray-300 shadow-sm text-sm py-2 pl-3">
+                    <option value="">-- Seleziona --</option>
+                    {Object.keys(myLensData).map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-2">Il modello lente si sceglie per ciascun occhio qui sotto (può essere diverso tra OD e OS).</p>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <LensEyeForm label="OCCHIO DESTRO (OD)" color="blue"  lensData={myLensData} ranges={ranges} value={{ ...od, manufacturer: lensManuf, model: lensModel }} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
-                  <LensEyeForm label="OCCHIO SINISTRO (OS)" color="green" lensData={myLensData} ranges={ranges} value={{ ...os, manufacturer: lensManuf, model: lensModel }} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
+                  <LensEyeForm label="OCCHIO DESTRO (OD)" color="blue"  lensData={myLensData} ranges={ranges} value={{ ...od, manufacturer: lensManuf }} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
+                  <LensEyeForm label="OCCHIO SINISTRO (OS)" color="green" lensData={myLensData} ranges={ranges} value={{ ...os, manufacturer: lensManuf }} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
                 </div>
               </div>
             </div>
             <div className="p-5 border-t bg-white flex justify-end gap-4 sticky bottom-0">
               <button onClick={onClose} className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50">Annulla</button>
-              <button onClick={generateQR} disabled={!form.name || !lensManuf || !lensModel}
+              <button onClick={generateQR} disabled={!form.name || !lensManuf || !od.model || !os.model}
                 className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50">
                 Genera QR
               </button>
@@ -991,16 +981,14 @@ function PasswordModal({ onClose }) {
 function RequestModal({ req, myLensData, ranges, onClose }) {
   const cur = req.current_data || {};
   const [manuf, setManuf] = useState(cur.manufacturer || '');
-  const [model, setModel] = useState(cur.model || '');
-  const [od, setOd] = useState({ type: cur.od?.type||'', pwr: cur.od?.pwr||'', cyl: cur.od?.cyl||'', axis: cur.od?.axis||'', add: cur.od?.add||'' });
-  const [os, setOs] = useState({ type: cur.os?.type||'', pwr: cur.os?.pwr||'', cyl: cur.os?.cyl||'', axis: cur.os?.axis||'', add: cur.os?.add||'' });
-
-  const models = myLensData && manuf ? Object.keys(myLensData[manuf] || {}) : [];
+  const [od, setOd] = useState({ model: cur.od?.model || cur.model || '', type: cur.od?.type||'', pwr: cur.od?.pwr||'', cyl: cur.od?.cyl||'', axis: cur.od?.axis||'', add: cur.od?.add||'' });
+  const [os, setOs] = useState({ model: cur.os?.model || cur.model || '', type: cur.os?.type||'', pwr: cur.os?.pwr||'', cyl: cur.os?.cyl||'', axis: cur.os?.axis||'', add: cur.os?.add||'' });
 
   const inputCls = "w-full border rounded p-1 text-sm";
 
   async function save() {
-    const newData = { manufacturer: manuf, model, od, os };
+    // model legacy = modello OD (per compatibilità con dati/UI esistenti)
+    const newData = { manufacturer: manuf, model: od.model, od, os };
     await updateDoc(doc(db, 'change_requests', req.id), {
       new_data: newData, status: 'completed'
     });
@@ -1055,25 +1043,16 @@ function RequestModal({ req, myLensData, ranges, onClose }) {
       <div className="bg-white w-full max-w-2xl rounded-xl shadow-2xl p-6 border-t-4 border-blue-500 max-h-[90vh] overflow-y-auto">
         <h3 className="text-xl font-bold text-gray-900 mb-2">Aggiorna Dati Cliente</h3>
         <p className="text-sm text-gray-600 mb-4">Modifica i parametri e invia l'aggiornamento all'app del cliente.</p>
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="text-xs font-bold">Produttore</label>
-            <select value={manuf} onChange={e => { setManuf(e.target.value); setModel(''); }} className={inputCls}>
-              <option value="">--</option>
-              {Object.keys(myLensData).map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-bold">Modello</label>
-            <select value={model} disabled={!manuf} onChange={e => setModel(e.target.value)} className={inputCls}>
-              <option value="">--</option>
-              {models.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
+        <div className="mb-4">
+          <label className="text-xs font-bold">Produttore (comune ai due occhi)</label>
+          <select value={manuf} onChange={e => { setManuf(e.target.value); setOd(v => ({ ...v, model: '', type: '' })); setOs(v => ({ ...v, model: '', type: '' })); }} className={inputCls}>
+            <option value="">--</option>
+            {Object.keys(myLensData).map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
         </div>
         <div className="grid grid-cols-2 gap-6 pt-3">
-          <LensEyeForm label="OCCHIO DESTRO (OD)" color="blue"  lensData={myLensData} ranges={ranges} value={{ ...od, manufacturer: manuf, model }} onChange={vals => setOd(v => ({ ...v, ...vals }))} />
-          <LensEyeForm label="OCCHIO SINISTRO (OS)" color="green" lensData={myLensData} ranges={ranges} value={{ ...os, manufacturer: manuf, model }} onChange={vals => setOs(v => ({ ...v, ...vals }))} />
+          <LensEyeForm label="OCCHIO DESTRO (OD)" color="blue"  lensData={myLensData} ranges={ranges} value={{ ...od, manufacturer: manuf }} onChange={vals => setOd(v => ({ ...v, ...vals }))} />
+          <LensEyeForm label="OCCHIO SINISTRO (OS)" color="green" lensData={myLensData} ranges={ranges} value={{ ...os, manufacturer: manuf }} onChange={vals => setOs(v => ({ ...v, ...vals }))} />
         </div>
         <div className="mt-6 flex justify-end gap-3">
           <button onClick={onClose} className="bg-gray-100 text-gray-700 px-4 py-2 rounded font-bold">Annulla</button>
