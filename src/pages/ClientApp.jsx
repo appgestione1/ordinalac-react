@@ -874,12 +874,11 @@ export default function ClientApp() {
                     onChange={e => setQuickQtyOD(e.target.value)}
                     onBlur={e => setQuickQtyOD(Math.max(1, parseInt(e.target.value) || 1).toString())}
                     className="w-14 px-2 py-1 border border-gray-300 rounded-md text-center bg-white text-gray-900 text-sm" />
-                  <span className="text-sm text-gray-600">pz.</span>
+                  {priceOD !== null && <span className="text-sm font-semibold text-gray-800">{fmtEur(priceOD)}</span>}
                 </div>
               </div>
               <p className="text-gray-600 text-xs mt-1">
                 {od.type || 'N/D'}{odParams.line ? ' · ' + odParams.line : ''}{odParams.add ? ' · ADD ' + odParams.add : ''}
-                {priceOD !== null && <span className="font-semibold text-gray-800"> · {fmtEur(priceOD)}/pz.</span>}
               </p>
 
               {/* OS */}
@@ -890,12 +889,11 @@ export default function ClientApp() {
                     onChange={e => setQuickQtyOS(e.target.value)}
                     onBlur={e => setQuickQtyOS(Math.max(1, parseInt(e.target.value) || 1).toString())}
                     className="w-14 px-2 py-1 border border-gray-300 rounded-md text-center bg-white text-gray-900 text-sm" />
-                  <span className="text-sm text-gray-600">pz.</span>
+                  {priceOS !== null && <span className="text-sm font-semibold text-gray-800">{fmtEur(priceOS)}</span>}
                 </div>
               </div>
               <p className="text-gray-600 text-xs mt-1">
                 {os.type || 'N/D'}{osParams.line ? ' · ' + osParams.line : ''}{osParams.add ? ' · ADD ' + osParams.add : ''}
-                {priceOS !== null && <span className="font-semibold text-gray-800"> · {fmtEur(priceOS)}/pz.</span>}
               </p>
 
               {/* Totale ordine (prezzi dal listino ottico, real-time) */}
