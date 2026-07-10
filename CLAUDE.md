@@ -165,7 +165,7 @@ Nel tab **Catalogo Master** ora si editano i range diottrici dalla UI (prima era
 
 Problema segnalato dall'utente: l'app installata recepiva i deploy solo disinstallando/reinstallando, e il toggle consegna a domicilio non era in tempo reale. Tre cause e tre fix:
 
-1. **Firebase Hosting serviva index.html con cache 1h** (default senza `headers`) → in `firebase.json`: `/assets/**` = `max-age=31536000, immutable` (i nomi hanno l'hash), `**/*.@(html|json)` e `/sw.js` = `no-cache`.
+1. **Firebase Hosting serviva index.html con cache 1h** (default senza `headers`) → in `firebase.json`: `**` = `no-cache` come base, poi eccezioni `**/*.@(png|ico|webp|jpg)` = 1h e `/assets/**` = `max-age=31536000, immutable` (i nomi hanno l'hash). ATTENZIONE: un pattern `**/*.html` NON copre i path riscritti dalla SPA (`/`, `/dashboard`…) — serve la base `**` (verificato con curl sugli header live).
 2. **L'app installata riprende dalla memoria senza mai ricaricare la pagina** → auto-update in `main.jsx`: `vite.config.js` genera `__BUILD_ID__` (define) e scrive `dist/version.json` a ogni build (plugin `write-version-json`); in PROD a ogni avvio e a ogni `visibilitychange→visible` l'app fa fetch no-store di `/version.json` e se la build è diversa fa `location.reload()` (guard sessionStorage `pushgo_reloaded_for` contro i loop se il CDN è indietro).
 3. **`home_delivery` letto una volta con getDoc** → ora `onSnapshot` su `optician_config/{oid}/settings/main` in `fetchLensData` (unsub in `settingsUnsub`, pulito allo smontaggio): se l'ottico disattiva mentre l'app è aperta il toggle sparisce in tempo reale e delivery torna pickup.
 
