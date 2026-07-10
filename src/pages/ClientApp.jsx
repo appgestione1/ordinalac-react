@@ -853,13 +853,14 @@ export default function ClientApp() {
 
         {orderStatus === 'idle' && (
           <>
-            <h1 className="text-3xl font-bold text-gray-800">Pronto per l'Ordine</h1>
+            <h1 className="text-2xl font-bold text-gray-800">Pronto per l'Ordine</h1>
 
             <div className="text-left bg-gray-50 p-4 rounded-lg my-6 border">
-              <p className="text-gray-800 font-medium">{name}</p>
-              <p className="text-gray-700 text-sm mt-1">
-                {phone}{email ? ` | ${email}` : ''}
-              </p>
+              <div className="flex justify-between items-center gap-2">
+                <p className="text-gray-800 font-medium truncate">{name}</p>
+                <p className="text-gray-700 text-sm flex-shrink-0">{phone}</p>
+              </div>
+              {email && <p className="text-gray-700 text-sm mt-1">{email}</p>}
               <p className="text-gray-600 text-sm">
                 {delivery === 'delivery' ? `📦 Consegna: ${ls('address')}` : '🏪 Ritiro in negozio'}
               </p>
@@ -940,6 +941,14 @@ export default function ClientApp() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </button>
+              {/* Uscita dall'app senza ordinare */}
+              <button onClick={() => window.close()}
+                className="flex flex-col items-center text-gray-400 hover:text-red-500 px-1">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
+                </svg>
+                <span className="text-[10px] font-bold tracking-wider mt-0.5">ESCI</span>
+              </button>
             </div>
 
             <div className="mt-2">
@@ -948,16 +957,6 @@ export default function ClientApp() {
               </button>
             </div>
 
-            {/* Uscita dall'app senza ordinare */}
-            <div className="flex justify-end mt-3 -mb-2">
-              <button onClick={() => window.close()}
-                className="flex flex-col items-center text-gray-400 hover:text-red-500 px-2 py-1">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
-                </svg>
-                <span className="text-[10px] font-bold tracking-wider mt-0.5">ESCI</span>
-              </button>
-            </div>
           </>
         )}
       </div>
