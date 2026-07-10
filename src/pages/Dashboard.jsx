@@ -56,6 +56,26 @@ function lensModelLabel(l) {
   return mod === mos ? mod : `OD ${mod || '—'} · OS ${mos || '—'}`;
 }
 
+const fmtEur = n => '€ ' + Number(n).toFixed(2).replace('.', ',');
+
+// Riga occhio nella card ordine: modello → tipo/diottrie → quantità → prezzo
+function EyeOrderRow({ label, color, eye, fallbackModel }) {
+  if (!eye) return null;
+  const price = Number(eye.price);
+  const hasPrice = Number.isFinite(price) && price > 0;
+  return (
+    <div className="border-b border-gray-200 pb-1.5 last:border-b-0">
+      <div className="flex items-center gap-2">
+        <span className={`font-bold ${color} text-xs w-6 flex-shrink-0`}>{label}</span>
+        <span className="flex-1 text-xs font-semibold text-gray-800 truncate">{eye.model || fallbackModel || '—'}</span>
+        <span className="font-bold bg-white border px-1 rounded text-xs flex-shrink-0">{eye.qty || 1} pz</span>
+        {hasPrice && <span className="font-bold text-blue-700 text-xs w-16 text-right flex-shrink-0">{fmtEur(price)}</span>}
+      </div>
+      <div className="pl-8 mt-0.5"><EyeParams eye={eye} /></div>
+    </div>
+  );
+}
+
 // ── Componente LensEyeForm (ottico compila prescrizione) ─────────────
 function LensEyeForm({ label, color, lensData, ranges, value, onChange }) {
   const models = lensData && value.manufacturer ? Object.keys(lensData[value.manufacturer] || {}) : [];
@@ -592,7 +612,7 @@ function OrderCard({ order, onStatusChange, onDelete, onSupply }) {
 
       <div className="bg-gray-50 p-3 rounded border border-gray-100 text-sm">
         <div className="flex justify-between items-center mb-2 gap-2 flex-wrap">
-          <span className="font-bold">{l.manufacturer} {lensModelLabel(l)}</span>
+          <span className="font-bold">{l.manufacturer}</span>
           {hasSupply
             ? <span className={`px-2 py-1 rounded text-xs font-bold ${supplyDest === 'client' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
                 {supplyDest === 'client' ? '🟣 Fornitura: CLIENTE' : '🟠 Fornitura: NEGOZIO'}
@@ -605,22 +625,14 @@ function OrderCard({ order, onStatusChange, onDelete, onSupply }) {
             )
           }
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div className="flex justify-between items-center border-b pb-1">
-            <span className="font-bold text-blue-600 w-8 text-xs">OD</span>
-            <div className="flex-1 text-right"><EyeParams eye={l.od} /></div>
-            <span className="font-bold ml-2 bg-white border px-1 rounded text-xs">{l.od?.qty||1}pz</span>
-          </div>
-          <div className="flex justify-between items-center border-b pb-1">
-            <span className="font-bold text-green-600 w-8 text-xs">OS</span>
-            <div className="flex-1 text-right"><EyeParams eye={l.os} /></div>
-            <span className="font-bold ml-2 bg-white border px-1 rounded text-xs">{l.os?.qty||1}pz</span>
-          </div>
+        <div className="space-y-1.5">
+          <EyeOrderRow label="OD" color="text-blue-600"  eye={l.od} fallbackModel={l.model} />
+          <EyeOrderRow label="OS" color="text-green-600" eye={l.os} fallbackModel={l.model} />
         </div>
         {l.total != null && (
           <div className="flex justify-between items-center pt-2 mt-2 border-t border-gray-200">
             <span className="font-bold text-gray-700 text-xs uppercase">Totale</span>
-            <span className="font-bold text-blue-700">€ {Number(l.total).toFixed(2).replace('.', ',')}</span>
+            <span className="font-bold text-blue-700">{fmtEur(l.total)}</span>
           </div>
         )}
       </div>
@@ -653,16 +665,18 @@ function OrderCard({ order, onStatusChange, onDelete, onSupply }) {
 
 function printOrder(order) {
   const l = order.lens_order || {};
+  const eurRow = p => (Number.isFinite(Number(p)) && Number(p) > 0) ? fmtEur(p) : '-';
   const w = window.open('', '_blank', 'height=600,width=800');
   w.document.write(`<html><head><title>Ordine - ${order.patient_name}</title>
     <style>body{font-family:sans-serif;padding:20px;} table{border-collapse:collapse;width:100%} td,th{border:1px solid #ddd;padding:8px;}</style>
     </head><body>
     <h2>Ordine Lenti — ${order.patient_name}</h2>
     <p><b>Produttore:</b> ${l.manufacturer}</p>
-    <table><tr><th>Occhio</th><th>Modello</th><th>Tipo</th><th>PWR</th><th>CYL</th><th>AXIS</th><th>ADD</th><th>Qty</th></tr>
-    <tr><td>OD</td><td>${l.od?.model||l.model||'-'}</td><td>${l.od?.type||'-'}</td><td>${l.od?.pwr||'-'}</td><td>${l.od?.cyl||'-'}</td><td>${l.od?.axis||'-'}</td><td>${l.od?.add||'-'}</td><td>${l.od?.qty||1}</td></tr>
-    <tr><td>OS</td><td>${l.os?.model||l.model||'-'}</td><td>${l.os?.type||'-'}</td><td>${l.os?.pwr||'-'}</td><td>${l.os?.cyl||'-'}</td><td>${l.os?.axis||'-'}</td><td>${l.os?.add||'-'}</td><td>${l.os?.qty||1}</td></tr>
+    <table><tr><th>Occhio</th><th>Modello</th><th>Tipo</th><th>PWR</th><th>CYL</th><th>AXIS</th><th>ADD</th><th>Qty</th><th>Prezzo</th></tr>
+    <tr><td>OD</td><td>${l.od?.model||l.model||'-'}</td><td>${l.od?.type||'-'}</td><td>${l.od?.pwr||'-'}</td><td>${l.od?.cyl||'-'}</td><td>${l.od?.axis||'-'}</td><td>${l.od?.add||'-'}</td><td>${l.od?.qty||1}</td><td>${eurRow(l.od?.price)}</td></tr>
+    <tr><td>OS</td><td>${l.os?.model||l.model||'-'}</td><td>${l.os?.type||'-'}</td><td>${l.os?.pwr||'-'}</td><td>${l.os?.cyl||'-'}</td><td>${l.os?.axis||'-'}</td><td>${l.os?.add||'-'}</td><td>${l.os?.qty||1}</td><td>${eurRow(l.os?.price)}</td></tr>
     </table>
+    ${l.total != null ? `<p style="text-align:right;font-size:16px"><b>TOTALE: ${fmtEur(l.total)}</b></p>` : ''}
     <p><b>Consegna:</b> ${order.delivery?.mode === 'delivery' ? order.delivery?.address_full : 'Ritiro in negozio'}</p>
     <script>window.print();window.close();<\/script></body></html>`);
   w.document.close();

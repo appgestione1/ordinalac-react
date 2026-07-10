@@ -180,6 +180,12 @@ Il produttore resta comune ai due occhi, ma il **modello (e quindi tipo/diottrie
 - Verifica Playwright 14/14: selezione per occhio, prezzi/totale con modelli diversi, QR con `mdos`, QR legacy senza `mdos`.
 - **Fix viste ottico/admin** (stesso giorno): helper `lensModelLabel(l)` (unico se OD=OS, altrimenti "OD … · OS …") usato in Dashboard OrderCard e in SuperAdmin (forniture, lista/dettaglio clienti, storico prescrizioni e ordini); la **card ordine in Dashboard ora mostra il Totale** (`lens_order.total`) quando presente. E2E Dashboard 14/14 con ottico di prova reale (login, card ordine, Nuovo Cliente/QR con modelli per occhio, RequestModal → `new_data` con `od.model`/`os.model` verificato su Firestore, Listino) — account e dati di prova eliminati (tranne 1 change_request completata orfana: le regole non permettono delete).
 
+## Card ordine riorganizzata + parità console (10/07/2026, sera)
+
+- **Dashboard OrderCard**: nuovo layout per occhio (`EyeOrderRow`: modello → tipo/diottrie → quantità → **prezzo**), header solo produttore, totale già presente; **stampa ordine** con colonna Prezzo e riga TOTALE. Helper `fmtEur` condiviso nel file.
+- **PushGo.js (nuovaconsole) allineato al portale**: stessa `EyeOrderRow`, telefono cliente, **pulsante Stampa** (stesso layout di stampa), **"Ordina al Fornitore"** con modal destinazione (Cliente solo se delivery / Negozio) → scrive `supply_request` come il portale, badge 🟣/🟠 quando pending; totale. Rimossi `lensModelLabel`/`eyeLine` ormai inutili in PushGo.
+- Verifica e2e 17/17 su entrambi (dev server + ottico di prova reale): card con modelli/prezzi/totale, fornitura end-to-end dalla console (badge NEGOZIO scritto su Firestore), zero errori JS. Dati di prova ripuliti.
+
 ## Auto-aggiornamento PWA + settings real-time (10/07/2026)
 
 Problema segnalato dall'utente: l'app installata recepiva i deploy solo disinstallando/reinstallando, e il toggle consegna a domicilio non era in tempo reale. Tre cause e tre fix:
