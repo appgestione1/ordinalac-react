@@ -93,6 +93,7 @@ export default function ClientApp() {
   const [quickQtyOD, setQuickQtyOD]   = useState('1');
   const [quickQtyOS, setQuickQtyOS]   = useState('1');
   const [askModal, setAskModal]       = useState(false);
+  const [deliveryModal, setDeliveryModal] = useState(false);
 
   // Richiesta modifica prescrizione
   const [changeReqPending, setChangeReqPending] = useState(false);
@@ -341,6 +342,24 @@ export default function ClientApp() {
     return null;
   }
 
+  // ── Consegna a domicilio: indirizzo completo? ───────────────────────
+  const addressComplete = () =>
+    addrStreet.trim() && /^\d{5}$/.test(addrCap.trim()) && addrCity.trim() && addrProv.trim();
+
+  // Dal popup "c/o Domicilio": vai ai Dati Cliente con i campi indirizzo evidenziati
+  function goAddDeliveryData() {
+    setDeliveryModal(false);
+    setDelivery('delivery'); // così saveSettings pretende l'indirizzo (persistito solo al salvataggio)
+    const errs = {};
+    if (!addrStreet.trim()) errs.addrStreet = 'Obbligatorio per la consegna';
+    if (!/^\d{5}$/.test(addrCap.trim())) errs.addrCap = 'CAP non valido';
+    if (!addrCity.trim()) errs.addrCity = 'Obbligatorio';
+    if (!addrProv.trim()) errs.addrProv = 'Obbl.';
+    setErrors(errs);
+    setActiveTab('patient');
+    setView('settings');
+  }
+
   // ── Salva impostazioni ──────────────────────────────────────────────
   async function saveSettings() {
     // Anagrafica obbligatoria: nome, telefono, email, CF, privacy
@@ -458,7 +477,7 @@ export default function ClientApp() {
       setQuickQtyOD('1'); setQuickQtyOS('1');
       lss('qtyOD', '1'); lss('qtyOS', '1');
 
-      // Crea/aggiorna client_profiles — garantisce che esiste anche senza "Conferma Installazione"
+      // Crea/aggiorna client_profiles — garantisce che esiste anche senza "Salva"
       const uid = auth.currentUser?.uid;
       if (uid && opticianId) {
         setDoc(doc(db, 'client_profiles', uid), {
@@ -481,6 +500,36 @@ export default function ClientApp() {
   }
 
   const deliveryLabel = delivery === 'delivery' ? 'c/o Domicilio' : 'c/o Store';
+
+  // Blocco "Richiedi aggiornamento prescrizione" (usato in action view e tab La tua Lente)
+  const changeReqSection = (prominent = false) => (
+    <>
+      {changeReqDone && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center text-sm text-green-700 font-semibold">
+          ✓ Prescrizione aggiornata dal tuo ottico!
+        </div>
+      )}
+      {!changeReqDone && changeReqPending && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center justify-between text-sm text-yellow-800">
+          <span>⏳ Richiesta modifica in attesa...</span>
+          <button onClick={cancelChangeReq} className="text-xs underline text-yellow-600 ml-2 flex-shrink-0">Annulla</button>
+        </div>
+      )}
+      {!changeReqDone && !changeReqPending && opticianId && (
+        prominent ? (
+          <button onClick={requestChange}
+            className="w-full border border-blue-300 text-blue-600 bg-blue-50 hover:bg-blue-100 font-semibold text-sm py-2.5 rounded-md">
+            🔄 Richiedi aggiornamento prescrizione
+          </button>
+        ) : (
+          <button onClick={requestChange}
+            className="text-xs text-gray-400 hover:text-blue-500 underline w-full text-center py-1">
+            Richiedi aggiornamento prescrizione
+          </button>
+        )
+      )}
+    </>
+  );
   const odParams = buildEyeParams(od);
   const osParams = buildEyeParams(os);
 
@@ -674,6 +723,9 @@ export default function ClientApp() {
 
             <EyeConfig eye="od" label="OCCHIO DESTRO"  types={types} values={od} locked={lensLocked} rangesByType={rangesByType} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
             <EyeConfig eye="os" label="OCCHIO SINISTRO" types={types} values={os} locked={lensLocked} rangesByType={rangesByType} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
+
+            {/* Richiesta modifica prescrizione (stessa funzione della action view) */}
+            <div className="pt-2">{changeReqSection(true)}</div>
           </div>
         )}
 
@@ -691,10 +743,16 @@ export default function ClientApp() {
           </div>
         )}
 
-        <button onClick={saveSettings}
-          className="w-full bg-blue-600 text-white py-3 px-4 rounded-md shadow-lg font-semibold hover:bg-blue-700 mt-6 sticky bottom-4">
-          Conferma Installazione
-        </button>
+        <div className="flex gap-3 mt-6 sticky bottom-4">
+          <button onClick={saveSettings}
+            className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-md shadow-lg font-semibold hover:bg-blue-700">
+            Salva
+          </button>
+          <button onClick={() => window.close()}
+            className="w-28 bg-gray-200 text-gray-700 py-3 px-4 rounded-md shadow-lg font-semibold hover:bg-gray-300">
+            Chiudi
+          </button>
+        </div>
       </div>
 
       {/* Modal: ordina subito? */}
@@ -794,23 +852,7 @@ export default function ClientApp() {
             </div>
 
             {/* Richiesta modifica prescrizione */}
-            {changeReqDone && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center text-sm text-green-700 font-semibold">
-                ✓ Prescrizione aggiornata dal tuo ottico!
-              </div>
-            )}
-            {!changeReqDone && changeReqPending && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center justify-between text-sm text-yellow-800">
-                <span>⏳ Richiesta modifica in attesa...</span>
-                <button onClick={cancelChangeReq} className="text-xs underline text-yellow-600 ml-2 flex-shrink-0">Annulla</button>
-              </div>
-            )}
-            {!changeReqDone && !changeReqPending && opticianId && (
-              <button onClick={requestChange}
-                className="text-xs text-gray-400 hover:text-blue-500 underline w-full text-center py-1">
-                Richiedi aggiornamento prescrizione
-              </button>
-            )}
+            {changeReqSection()}
 
             {/* Toggle consegna + pulsanti */}
             <div className="flex items-center justify-between my-4 space-x-2">
@@ -819,6 +861,10 @@ export default function ClientApp() {
                   <input type="checkbox" checked={delivery === 'delivery'}
                     onChange={e => {
                       const val = e.target.checked ? 'delivery' : 'pickup';
+                      if (val === 'delivery' && !addressComplete()) {
+                        setDeliveryModal(true); // checkbox controllato: resta su "c/o Store"
+                        return;
+                      }
                       setDelivery(val);
                       lss('delivery', val);
                     }} />
@@ -843,6 +889,30 @@ export default function ClientApp() {
           </>
         )}
       </div>
+
+      {/* Modal: dati mancanti per consegna a domicilio */}
+      {deliveryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
+          <div className="bg-white w-full max-w-sm rounded-xl shadow-2xl p-6 text-center border-t-4 border-amber-400">
+            <div className="text-3xl mb-2">🏠</div>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Consegna a Domicilio</h3>
+            <p className="text-gray-600 mb-6 text-sm">
+              Per usufruire del servizio di spedizione presso il tuo domicilio devi prima compilare
+              i dati mancanti nell'<strong>Indirizzo di Consegna</strong>.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button onClick={goAddDeliveryData}
+                className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">
+                Aggiungi dati mancanti
+              </button>
+              <button onClick={() => setDeliveryModal(false)}
+                className="w-full bg-gray-100 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-200">
+                Annulla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

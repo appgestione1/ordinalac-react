@@ -2,7 +2,7 @@ import ParamField from './ParamField';
 import { pwrOptions, cylOptions, axisOptions, addOptions } from '../lib/lensRanges';
 
 export default function EyeConfig({ eye, label, types, values, onChange, locked, rangesByType }) {
-  const { qty, type, pwr, cyl, axis, add } = values;
+  const { type, pwr, cyl, axis, add } = values;
   const t = type.toLowerCase();
 
   const showPwr = !!type && !t.includes('nessun');
@@ -19,17 +19,6 @@ export default function EyeConfig({ eye, label, types, values, onChange, locked,
   return (
     <div className="border-t pt-4 mt-4">
       <h3 className="text-md font-bold text-gray-800 mb-3">{label}</h3>
-      <div className="flex items-center space-x-2 mb-3">
-        <label className="block text-sm font-medium text-gray-700">Quantità (Default)</label>
-        <input
-          type="number"
-          value={qty}
-          onChange={e => onChange({ qty: e.target.value })}
-          className="mt-1 block w-20 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-center bg-white text-gray-900"
-        />
-        <span className="text-sm text-gray-700 pt-1">pz.</span>
-      </div>
-
       <div>
         <label className="block text-sm font-medium text-gray-700">Tipo Correzione</label>
         <select

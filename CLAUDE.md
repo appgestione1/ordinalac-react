@@ -149,6 +149,14 @@ Nel tab **Catalogo Master** ora si editano i range diottrici dalla UI (prima era
 - `?dev=1` ora setta anche privacy=true
 - Verificato con Playwright (26/26): gate Android/iOS/in-app, standalone senza gate, manifest dinamico iOS con params, validazione, ritorno incompleto, desktop e dev esenti.
 
+## Rifiniture ClientApp (10/07/2026)
+
+- **Popup "Consegna a Domicilio"** (action view): spostando l'interruttore su "c/o Domicilio" con indirizzo incompleto (via + CAP 5 cifre + città + provincia, check `addressComplete()`) si apre un popup; "Annulla" lo chiude e l'interruttore resta su "c/o Store" (checkbox controllato: non si sposta mai finché l'indirizzo manca); "Aggiungi dati mancanti" (`goAddDeliveryData()`) imposta delivery, apre settings > Dati Cliente con i campi indirizzo mancanti già in rosso. Con indirizzo completo il toggle funziona senza popup.
+- **"Conferma Installazione" → "Salva"** + pulsante **"Chiudi"** accanto (`window.close()`, affidabile in PWA standalone, può essere ignorato in tab browser aperte a mano). Barra sticky in fondo alla settings view.
+- **"Richiedi aggiornamento prescrizione" anche nella tab "La tua Lente"**: blocco unificato in `changeReqSection(prominent)` usato sia in action view (link grigio) sia nella tab lenti (pulsante azzurro 🔄); stessi stati pending/done/Annulla. Compare solo con `opticianId` (quindi non nei dev mode).
+- **Rimossa "Quantità (Default)"** da `EyeConfig.jsx` (tab La tua Lente): la quantità si imposta solo nel popup dell'ordine (action view), lo stato `qty` resta gestito internamente.
+- Verifiche Playwright: 15/15 popup domicilio, 9/9 Salva/Chiudi/prescrizione, 5/5 rimozione quantità. NB: un doc orfano `change_requests` con `optician_id: "test-optician"` è rimasto in Firestore dai test (innocuo).
+
 ## TODO aperti
 
 1. Pagamenti digitali (tab "Pagamento" nella ClientApp è ancora placeholder "disponibile a breve"; quando pronta, i dati di pagamento andranno richiesti al primo ordine — nota già presente nella tab)
