@@ -1,7 +1,7 @@
 import ParamField from './ParamField';
 import { pwrOptions, cylOptions, axisOptions, addOptions } from '../lib/lensRanges';
 
-export default function EyeConfig({ eye, label, types, values, onChange, locked, rangesByType }) {
+export default function EyeConfig({ eye, label, types, values, onChange, locked, rangesByType, priceLabel }) {
   const { type, pwr, cyl, axis, add } = values;
   const t = type.toLowerCase();
 
@@ -18,7 +18,10 @@ export default function EyeConfig({ eye, label, types, values, onChange, locked,
 
   return (
     <div className="border-t pt-4 mt-4">
-      <h3 className="text-md font-bold text-gray-800 mb-3">{label}</h3>
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="text-md font-bold text-gray-800">{label}</h3>
+        {priceLabel && <span className="text-sm font-bold text-blue-700">{priceLabel}</span>}
+      </div>
       <div>
         <label className="block text-sm font-medium text-gray-700">Tipo Correzione</label>
         <select

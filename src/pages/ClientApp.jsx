@@ -60,6 +60,7 @@ export default function ClientApp() {
   const [view, setView] = useState('loading'); // 'loading' | 'no-qr' | 'settings' | 'action'
   const [activeTab, setActiveTab] = useState('patient');
   const [lensData, setLensData] = useState(null);
+  const [pricing, setPricing]   = useState({}); // pricing_config dell'ottico (real-time)
   const [masterRanges, setMasterRanges] = useState(null);
   const [opticianId, setOpticianId] = useState('');
   const [lensLocked, setLensLocked] = useState(true);
@@ -101,6 +102,7 @@ export default function ClientApp() {
   const [changeReqDone, setChangeReqDone]       = useState(false);
   const changeReqUnsub = useRef(null);
   const settingsUnsub  = useRef(null);
+  const lensUnsub      = useRef(null);
 
   const models = lensData && manufacturer ? Object.keys(lensData[manufacturer] || {}) : [];
   const types  = lensData && manufacturer && model ? lensData[manufacturer]?.[model] || [] : [];
@@ -198,6 +200,7 @@ export default function ClientApp() {
       mounted = false;
       if (changeReqUnsub.current) changeReqUnsub.current();
       if (settingsUnsub.current) settingsUnsub.current();
+      if (lensUnsub.current) lensUnsub.current();
     };
   }, []);
 
@@ -210,11 +213,17 @@ export default function ClientApp() {
       'DAILIES': { 'DAILIES TOTAL1': ['Giornaliera Sferica', 'Giornaliera Torica', 'Giornaliera Multifocale'] },
       'ACUVUE': { 'ACUVUE OASYS MAX 1-Day': ['Giornaliera Sferica', 'Giornaliera Torica', 'Giornaliera Multifocale'] },
     };
+    const DEV_PRICING = {
+      'DAILIES::DAILIES TOTAL1::Giornaliera Sferica':     { enabled: true, price: '32.50' },
+      'DAILIES::DAILIES TOTAL1::Giornaliera Torica':      { enabled: true, price: '39.90' },
+      'DAILIES::DAILIES TOTAL1::Giornaliera Multifocale': { enabled: true, price: '45.00' },
+    };
     if (params.get('dev') === '1') {
       setName('Mario Rossi'); setPhone('3331234567');
       setEmail('mario@test.it'); setCf('RSSMRO80A01H501A');
       setPrivacy(true);
       setLensData(DEV_LENSDATA);
+      setPricing(DEV_PRICING);
       setManufacturer('DAILIES'); setModel('DAILIES TOTAL1');
       setOd({ qty: '1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
       setOs({ qty: '1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
@@ -228,6 +237,7 @@ export default function ClientApp() {
     if (params.get('dev') === 'action') {
       setName('Mario Rossi'); setPhone('3331234567');
       setLensData(DEV_LENSDATA);
+      setPricing(DEV_PRICING);
       setOd({ qty: '1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
       setOs({ qty: '1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
       setManufacturer('DAILIES'); setModel('DAILIES TOTAL1');
@@ -350,11 +360,22 @@ export default function ClientApp() {
       },
       () => {}
     );
-    try {
-      const snap = await getDoc(doc(db, 'optician_config', oid, 'lenses', 'main'));
-      if (snap.exists()) { setLensData(snap.data().data); return snap.data().data; }
-    } catch (e) { console.error(e); }
-    return null;
+    // Listino e prezzi in real-time: se l'ottico li modifica dalla dashboard
+    // il cliente li vede subito, senza riaprire l'app
+    if (lensUnsub.current) lensUnsub.current();
+    return new Promise(resolve => {
+      lensUnsub.current = onSnapshot(
+        doc(db, 'optician_config', oid, 'lenses', 'main'),
+        snap => {
+          if (snap.exists()) {
+            setLensData(snap.data().data);
+            setPricing(snap.data().pricing_config || {});
+          }
+          resolve(snap.exists() ? snap.data().data : null);
+        },
+        e => { console.error(e); resolve(null); }
+      );
+    });
   }
 
   // ── Consegna a domicilio: indirizzo completo? ───────────────────────
@@ -460,9 +481,12 @@ export default function ClientApp() {
     msg += `OCCHIO DESTRO [${quickQtyOD} pz.]\nTipo: ${od.type || 'N/D'}\n`;
     if (odParams.line) msg += odParams.line + '\n';
     if (odParams.add)  msg += `ADD: ${odParams.add}\n`;
+    if (priceOD !== null) msg += `Prezzo: ${fmtEur(priceOD)}/pz.\n`;
     msg += `\nOCCHIO SINISTRO [${quickQtyOS} pz.]\nTipo: ${os.type || 'N/D'}\n`;
     if (osParams.line) msg += osParams.line + '\n';
     if (osParams.add)  msg += `ADD: ${osParams.add}\n`;
+    if (priceOS !== null) msg += `Prezzo: ${fmtEur(priceOS)}/pz.\n`;
+    if (showTotal) msg += `\nTOTALE: ${fmtEur(orderTotal)}\n`;
     msg += '\nGrazie!';
 
     try {
@@ -483,8 +507,9 @@ export default function ClientApp() {
         },
         lens_order: {
           manufacturer, model,
-          od: { qty: quickQtyOD, type: od.type, pwr: od.pwr, cyl: od.cyl, axis: od.axis, add: od.add },
-          os: { qty: quickQtyOS, type: os.type, pwr: os.pwr, cyl: os.cyl, axis: os.axis, add: os.add },
+          od: { qty: quickQtyOD, type: od.type, pwr: od.pwr, cyl: od.cyl, axis: od.axis, add: od.add, price: priceOD },
+          os: { qty: quickQtyOS, type: os.type, pwr: os.pwr, cyl: os.cyl, axis: os.axis, add: os.add, price: priceOS },
+          total: showTotal ? Math.round(orderTotal * 100) / 100 : null,
         },
       });
 
@@ -515,6 +540,18 @@ export default function ClientApp() {
   }
 
   const deliveryLabel = delivery === 'delivery' ? 'c/o Domicilio' : 'c/o Store';
+
+  // Prezzi dal listino ottico (aggiornati in real-time via onSnapshot)
+  const eyePrice = eye => {
+    const raw = pricing?.[`${manufacturer}::${model}::${eye.type}`]?.price;
+    const n = parseFloat(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const fmtEur  = n => '€ ' + n.toFixed(2).replace('.', ',');
+  const priceOD = eyePrice(od);
+  const priceOS = eyePrice(os);
+  const orderTotal = (priceOD ?? 0) * (parseInt(quickQtyOD) || 1) + (priceOS ?? 0) * (parseInt(quickQtyOS) || 1);
+  const showTotal  = priceOD !== null || priceOS !== null;
 
   // Blocco "Richiedi aggiornamento prescrizione" (usato in action view e tab La tua Lente)
   const changeReqSection = (prominent = false) => (
@@ -729,8 +766,8 @@ export default function ClientApp() {
               )}
             </div>
 
-            <EyeConfig eye="od" label="OCCHIO DESTRO"  types={types} values={od} locked={lensLocked} rangesByType={rangesByType} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
-            <EyeConfig eye="os" label="OCCHIO SINISTRO" types={types} values={os} locked={lensLocked} rangesByType={rangesByType} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
+            <EyeConfig eye="od" label="OCCHIO DESTRO"  types={types} values={od} locked={lensLocked} rangesByType={rangesByType} priceLabel={priceOD !== null ? `${fmtEur(priceOD)}/pz.` : null} onChange={vals => setOd(o => ({ ...o, ...vals }))} />
+            <EyeConfig eye="os" label="OCCHIO SINISTRO" types={types} values={os} locked={lensLocked} rangesByType={rangesByType} priceLabel={priceOS !== null ? `${fmtEur(priceOS)}/pz.` : null} onChange={vals => setOs(o => ({ ...o, ...vals }))} />
 
             {/* Richiesta modifica prescrizione (stessa funzione della action view) */}
             <div className="pt-2">{changeReqSection(true)}</div>
@@ -841,6 +878,7 @@ export default function ClientApp() {
               </div>
               <p className="text-gray-600 text-xs mt-1">
                 {od.type || 'N/D'}{odParams.line ? ' · ' + odParams.line : ''}{odParams.add ? ' · ADD ' + odParams.add : ''}
+                {priceOD !== null && <span className="font-semibold text-gray-800"> · {fmtEur(priceOD)}/pz.</span>}
               </p>
 
               {/* OS */}
@@ -856,7 +894,16 @@ export default function ClientApp() {
               </div>
               <p className="text-gray-600 text-xs mt-1">
                 {os.type || 'N/D'}{osParams.line ? ' · ' + osParams.line : ''}{osParams.add ? ' · ADD ' + osParams.add : ''}
+                {priceOS !== null && <span className="font-semibold text-gray-800"> · {fmtEur(priceOS)}/pz.</span>}
               </p>
+
+              {/* Totale ordine (prezzi dal listino ottico, real-time) */}
+              {showTotal && (
+                <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-200">
+                  <span className="text-gray-800 font-bold text-sm">Totale</span>
+                  <span className="text-blue-700 font-bold text-lg">{fmtEur(orderTotal)}</span>
+                </div>
+              )}
             </div>
 
             {/* Richiesta modifica prescrizione */}
@@ -904,8 +951,11 @@ export default function ClientApp() {
             {/* Uscita dall'app senza ordinare */}
             <div className="flex justify-end mt-3 -mb-2">
               <button onClick={() => window.close()}
-                className="text-xs text-gray-400 hover:text-gray-600 underline">
-                Esci dall'app ✕
+                className="flex flex-col items-center text-gray-400 hover:text-red-500 px-2 py-1">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
+                </svg>
+                <span className="text-[10px] font-bold tracking-wider mt-0.5">ESCI</span>
               </button>
             </div>
           </>

@@ -161,6 +161,14 @@ Nel tab **Catalogo Master** ora si editano i range diottrici dalla UI (prima era
 - **Indirizzo di Consegna**: rimossa casella "N." (`addrNum` resta nello stato/localStorage per retrocompatibilità, ancora unito in `address` full), label "Via / Piazza" → "Via / Piazza e Civico" a tutta larghezza.
 - Verifiche Playwright: 7/7 (esci/indirizzo/dashboard smoke) + 3/3 end-to-end consegna disattivata (doc scritto e ripulito con account usa-e-getta).
 
+## Prezzi lenti nella ClientApp + pulsante ESCI (10/07/2026)
+
+- **Pulsante ESCI** (popup ordine, basso a destra): icona di spegnimento + scritta "ESCI" (sostituisce il link "Esci dall'app ✕"), `window.close()`.
+- **Prezzi dal listino ottico visibili al cliente**: `fetchLensData` ora ascolta `optician_config/{oid}/lenses/main` con **onSnapshot** (prima getDoc) → catalogo E `pricing_config` in real-time: l'ottico cambia un prezzo dal Listino & Prezzi e il cliente lo vede subito. Stato `pricing` + helper `eyePrice(eye)` (chiave `manuf::model::type`, null se assente/0) e `fmtEur`.
+- Dove si vede: popup ordine (prezzo/pz. accanto a ogni occhio + riga **Totale** = prezzo×qtà OD + prezzo×qtà OS, ricalcolata live con le quantità), tab "La tua Lente" (prezzo accanto a OCCHIO DESTRO/SINISTRO via prop `priceLabel` di EyeConfig). Se l'ottico non ha messo il prezzo → semplicemente non compare (niente 0,00).
+- L'ordine ora salva anche i prezzi: `lens_order.od/os.price`, `lens_order.total`, e righe "Prezzo: €…" + "TOTALE: €…" nel message.
+- Dev fixture con prezzi finti (`DEV_PRICING`). Verifica Playwright 12/12, incluso cambio prezzo su Firestore con app aperta → aggiornato in tempo reale.
+
 ## Auto-aggiornamento PWA + settings real-time (10/07/2026)
 
 Problema segnalato dall'utente: l'app installata recepiva i deploy solo disinstallando/reinstallando, e il toggle consegna a domicilio non era in tempo reale. Tre cause e tre fix:
