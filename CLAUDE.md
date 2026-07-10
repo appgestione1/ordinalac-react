@@ -156,6 +156,10 @@ Nel tab **Catalogo Master** ora si editano i range diottrici dalla UI (prima era
 - **"Richiedi aggiornamento prescrizione" anche nella tab "La tua Lente"**: blocco unificato in `changeReqSection(prominent)` usato sia in action view (link grigio) sia nella tab lenti (pulsante azzurro 🔄); stessi stati pending/done/Annulla. Compare solo con `opticianId` (quindi non nei dev mode).
 - **Rimossa "Quantità (Default)"** da `EyeConfig.jsx` (tab La tua Lente): la quantità si imposta solo nel popup dell'ordine (action view), lo stato `qty` resta gestito internamente.
 - Verifiche Playwright: 15/15 popup domicilio, 9/9 Salva/Chiudi/prescrizione, 5/5 rimozione quantità. NB: un doc orfano `change_requests` con `optician_id: "test-optician"` è rimasto in Firestore dai test (innocuo).
+- **"Esci dall'app ✕"** in basso a destra del popup "Pronto per l'Ordine" (`window.close()`, per chi non vuole ordinare).
+- **Consegna a domicilio disattivabile dall'ottico**: card con toggle in Dashboard (tab Gestione Ordini, sotto il Codice Ottico) → `optician_config/{uid}/settings/main` campo `home_delivery` (bool, assente = attiva; leggibile dai client anonimi con le regole esistenti). ClientApp lo legge in `fetchLensData`: se `false` nasconde il toggle Store/Domicilio (etichetta fissa "Ritiro c/o Store") e forza `delivery=pickup` anche su localStorage.
+- **Indirizzo di Consegna**: rimossa casella "N." (`addrNum` resta nello stato/localStorage per retrocompatibilità, ancora unito in `address` full), label "Via / Piazza" → "Via / Piazza e Civico" a tutta larghezza.
+- Verifiche Playwright: 7/7 (esci/indirizzo/dashboard smoke) + 3/3 end-to-end consegna disattivata (doc scritto e ripulito con account usa-e-getta).
 
 ## TODO aperti
 

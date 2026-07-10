@@ -187,6 +187,7 @@ function DashboardPanel({ user }) {
   const [masterRanges, setMasterRanges] = useState({});
   const [myLensData, setMyLensData]       = useState({});
   const [myPricingConfig, setMyPricingConfig] = useState({});
+  const [homeDelivery, setHomeDelivery]   = useState(true);
   const [search, setSearch]   = useState('');
   const [dateStart, setDateStart] = useState(() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().split('T')[0]; });
   const [dateEnd, setDateEnd]     = useState(() => new Date().toISOString().split('T')[0]);
@@ -272,7 +273,22 @@ function DashboardPanel({ user }) {
         setMyPricingConfig(s.data().pricing_config || {});
       }
     });
+    getDoc(doc(db, 'optician_config', user.uid, 'settings', 'main')).then(s => {
+      if (s.exists()) setHomeDelivery(s.data().home_delivery !== false);
+    });
   }, [user.uid]);
+
+  async function toggleHomeDelivery() {
+    const next = !homeDelivery;
+    setHomeDelivery(next);
+    try {
+      await setDoc(doc(db, 'optician_config', user.uid, 'settings', 'main'),
+        { home_delivery: next }, { merge: true });
+    } catch {
+      setHomeDelivery(!next);
+      alert('Errore nel salvataggio dell\'impostazione. Riprova.');
+    }
+  }
 
   async function handleStatusChange(orderId, newStatus) {
     try {
@@ -452,6 +468,24 @@ function DashboardPanel({ user }) {
                   </code>
                 </div>
                 <span className="text-xs hidden sm:inline">Clicca per copiare</span>
+              </div>
+
+              {/* Servizio consegna a domicilio */}
+              <div className={`p-3 rounded shadow-sm flex justify-between items-center text-sm border-l-4 ${homeDelivery ? 'bg-green-50 border-green-500' : 'bg-gray-50 border-gray-400'}`}>
+                <div>
+                  <span className={`font-bold ${homeDelivery ? 'text-green-800' : 'text-gray-600'}`}>
+                    Consegna a domicilio: {homeDelivery ? 'attiva' : 'disattivata'}
+                  </span>
+                  <p className={`text-xs mt-0.5 ${homeDelivery ? 'text-green-700' : 'text-gray-500'}`}>
+                    {homeDelivery
+                      ? 'I tuoi clienti possono scegliere la spedizione a casa dall\'app.'
+                      : 'I tuoi clienti possono ordinare solo con ritiro in negozio.'}
+                  </p>
+                </div>
+                <label className="toggle-switch flex-shrink-0">
+                  <input type="checkbox" checked={homeDelivery} onChange={toggleHomeDelivery} />
+                  <span className="slider" />
+                </label>
               </div>
 
               {/* Lista ordini */}

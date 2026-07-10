@@ -76,6 +76,7 @@ export default function ClientApp() {
 
   // Consegna
   const [delivery, setDelivery]     = useState('pickup');
+  const [homeDelivery, setHomeDelivery] = useState(true); // servizio attivo per l'ottico
   const [addrStreet, setAddrStreet] = useState('');
   const [addrNum, setAddrNum]       = useState('');
   const [addrCap, setAddrCap]       = useState('');
@@ -334,6 +335,14 @@ export default function ClientApp() {
     // Range di produzione dal catalogo master (per vincolare i select diottrie)
     getDoc(doc(db, 'catalogs', 'master'))
       .then(s => { if (s.exists()) setMasterRanges(s.data().ranges || {}); })
+      .catch(() => {});
+    // Impostazioni ottico: consegna a domicilio attiva?
+    getDoc(doc(db, 'optician_config', oid, 'settings', 'main'))
+      .then(s => {
+        const enabled = !(s.exists() && s.data().home_delivery === false);
+        setHomeDelivery(enabled);
+        if (!enabled) { setDelivery('pickup'); lss('delivery', 'pickup'); }
+      })
       .catch(() => {});
     try {
       const snap = await getDoc(doc(db, 'optician_config', oid, 'lenses', 'main'));
@@ -628,18 +637,11 @@ export default function ClientApp() {
                   <span className="text-xs text-gray-400 italic">usato solo per consegna a domicilio</span>
                 )}
               </div>
-              <div className="flex space-x-2">
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-500">Via / Piazza</label>
-                  <input type="text" value={addrStreet} onChange={e => setAddrStreet(e.target.value)}
-                    className={`${inputCls(errors.addrStreet)} text-sm`} />
-                  {fieldErr('addrStreet')}
-                </div>
-                <div className="w-20">
-                  <label className="block text-xs font-medium text-gray-500">N.</label>
-                  <input type="text" value={addrNum} onChange={e => setAddrNum(e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500" />
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500">Via / Piazza e Civico</label>
+                <input type="text" value={addrStreet} onChange={e => setAddrStreet(e.target.value)}
+                  className={`${inputCls(errors.addrStreet)} text-sm`} />
+                {fieldErr('addrStreet')}
               </div>
               <div className="flex space-x-2">
                 <div className="w-24">
@@ -857,20 +859,26 @@ export default function ClientApp() {
             {/* Toggle consegna + pulsanti */}
             <div className="flex items-center justify-between my-4 space-x-2">
               <div className="flex items-center space-x-3 flex-1 min-w-0">
-                <label className="toggle-switch flex-shrink-0">
-                  <input type="checkbox" checked={delivery === 'delivery'}
-                    onChange={e => {
-                      const val = e.target.checked ? 'delivery' : 'pickup';
-                      if (val === 'delivery' && !addressComplete()) {
-                        setDeliveryModal(true); // checkbox controllato: resta su "c/o Store"
-                        return;
-                      }
-                      setDelivery(val);
-                      lss('delivery', val);
-                    }} />
-                  <span className="slider" />
-                </label>
-                <span className="text-gray-900 font-bold text-sm truncate">{deliveryLabel}</span>
+                {homeDelivery ? (
+                  <>
+                    <label className="toggle-switch flex-shrink-0">
+                      <input type="checkbox" checked={delivery === 'delivery'}
+                        onChange={e => {
+                          const val = e.target.checked ? 'delivery' : 'pickup';
+                          if (val === 'delivery' && !addressComplete()) {
+                            setDeliveryModal(true); // checkbox controllato: resta su "c/o Store"
+                            return;
+                          }
+                          setDelivery(val);
+                          lss('delivery', val);
+                        }} />
+                      <span className="slider" />
+                    </label>
+                    <span className="text-gray-900 font-bold text-sm truncate">{deliveryLabel}</span>
+                  </>
+                ) : (
+                  <span className="text-gray-900 font-bold text-sm truncate">Ritiro c/o Store</span>
+                )}
               </div>
               <button onClick={() => setView('settings')} title="Impostazioni"
                 className="p-2 rounded-full text-gray-400 hover:bg-gray-100">
@@ -884,6 +892,14 @@ export default function ClientApp() {
             <div className="mt-2">
               <button onClick={sendOrder} className="mx-auto block focus:outline-none rounded-full focus:ring-4 focus:ring-red-300 pulse-active">
                 <img src="/buttonRed.png" alt="Invia Ordine Ora" className="w-36 h-36" />
+              </button>
+            </div>
+
+            {/* Uscita dall'app senza ordinare */}
+            <div className="flex justify-end mt-3 -mb-2">
+              <button onClick={() => window.close()}
+                className="text-xs text-gray-400 hover:text-gray-600 underline">
+                Esci dall'app ✕
               </button>
             </div>
           </>
