@@ -222,6 +222,8 @@ function DashboardPanel({ user }) {
   const [myLensData, setMyLensData]       = useState({});
   const [myPricingConfig, setMyPricingConfig] = useState({});
   const [homeDelivery, setHomeDelivery]   = useState(true);
+  const [paymentLink, setPaymentLink]     = useState('');   // link pagamento online (vuoto = disattivo)
+  const [paymentSaved, setPaymentSaved]   = useState(false);
   const [search, setSearch]   = useState('');
   const [dateStart, setDateStart] = useState(() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().split('T')[0]; });
   const [dateEnd, setDateEnd]     = useState(() => new Date().toISOString().split('T')[0]);
@@ -308,9 +310,26 @@ function DashboardPanel({ user }) {
       }
     });
     getDoc(doc(db, 'optician_config', user.uid, 'settings', 'main')).then(s => {
-      if (s.exists()) setHomeDelivery(s.data().home_delivery !== false);
+      if (s.exists()) {
+        setHomeDelivery(s.data().home_delivery !== false);
+        setPaymentLink(s.data().payment_link || '');
+      }
     });
   }, [user.uid]);
+
+  async function savePaymentLink() {
+    let link = paymentLink.trim();
+    if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
+    try {
+      await setDoc(doc(db, 'optician_config', user.uid, 'settings', 'main'),
+        { payment_link: link }, { merge: true });
+      setPaymentLink(link);
+      setPaymentSaved(true);
+      setTimeout(() => setPaymentSaved(false), 2500);
+    } catch {
+      alert('Errore nel salvataggio del link di pagamento. Riprova.');
+    }
+  }
 
   async function toggleHomeDelivery() {
     const next = !homeDelivery;
@@ -520,6 +539,26 @@ function DashboardPanel({ user }) {
                   <input type="checkbox" checked={homeDelivery} onChange={toggleHomeDelivery} />
                   <span className="slider" />
                 </label>
+              </div>
+
+              {/* Pagamenti online (link esterno: PayPal.Me, Satispay, Stripe...) */}
+              <div className={`p-3 rounded shadow-sm text-sm border-l-4 ${paymentLink ? 'bg-emerald-50 border-emerald-500' : 'bg-gray-50 border-gray-400'}`}>
+                <span className={`font-bold ${paymentLink ? 'text-emerald-800' : 'text-gray-600'}`}>
+                  Pagamenti online: {paymentLink ? 'attivi' : 'non configurati'}
+                </span>
+                <p className={`text-xs mt-0.5 ${paymentLink ? 'text-emerald-700' : 'text-gray-500'}`}>
+                  Incolla il link del tuo sistema di pagamento (PayPal.Me, Satispay, Stripe Payment Link...).
+                  Dopo l'ordine i clienti vedranno "Paga ora" con l'importo. Lascia vuoto per disattivare.
+                </p>
+                <div className="flex gap-2 mt-2">
+                  <input type="url" value={paymentLink} onChange={e => setPaymentLink(e.target.value)}
+                    placeholder="https://paypal.me/iltuonegozio"
+                    className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 bg-white" />
+                  <button onClick={savePaymentLink}
+                    className="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-semibold hover:bg-blue-700 flex-shrink-0">
+                    {paymentSaved ? '✓ Salvato' : 'Salva'}
+                  </button>
+                </div>
               </div>
 
               {/* Lista ordini */}

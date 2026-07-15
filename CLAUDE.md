@@ -196,9 +196,22 @@ Problema segnalato dall'utente: l'app installata recepiva i deploy solo disinsta
 
 NB: le app installate PRIMA di questo deploy non hanno il codice di auto-update → per quelle serve ancora un refresh/reinstallazione manuale una tantum; dai deploy successivi l'aggiornamento è automatico alla riapertura.
 
+## Pagamenti online via link dell'ottico (15/07/2026)
+
+Chiuso l'ultimo TODO: la tab "Pagamento" non è più un placeholder. Scelta dell'utente: **link di pagamento esterno configurato dall'ottico** (PayPal.Me, Satispay, Stripe Payment Link...) — zero backend, i soldi vanno direttamente all'ottico.
+
+- **Dato**: campo `payment_link` (string, vuoto/assente = disattivo) in `optician_config/{uid}/settings/main`, accanto a `home_delivery`. Leggibile dai client anonimi con le regole esistenti.
+- **Dashboard** (tab Gestione Ordini, card sotto "Consegna a domicilio"): input URL + Salva (`savePaymentLink`); se manca il protocollo viene aggiunto `https://` in automatico; bordo verde smeraldo quando attivo. Lascia vuoto per disattivare.
+- **ClientApp**: `paymentLink` letto dallo stesso `onSnapshot` di `home_delivery` in `fetchLensData` → real-time. Due punti di contatto:
+  - **Schermata successo ordine**: pulsante verde "💳 Paga ora · € totale" (`lastOrderTotal`, congelato in `sendOrder` prima del reset quantità) che apre il link in nuova scheda + "Chiudi" per tornare; con link attivo la schermata NON si auto-chiude dopo 4s (senza link comportamento invariato).
+  - **Tab Pagamento** (settings): se attivo spiega il flusso e offre "Apri pagamento online"; se non attivo, testo "il tuo Ottico non ha ancora attivato i pagamenti online".
+- Dev fixtures (`?dev=1` / `?dev=action`) con link PayPal finto.
+- Verifica Playwright 16/16 con ottico di prova reale (dev fixtures, QR reale, ordine con Paga ora € 70,00, card Dashboard con precompilazione, aggiornamento real-time sul client, disattivazione) — account e dati di prova eliminati.
+- NB: il pagamento è "fiduciario": l'importo lo digita il cliente nel sistema esterno (PayPal.Me ecc. non ricevono l'importo dal link). Se un giorno serve importo precompilato → Stripe Payment Links con prezzo fisso o PayPal.Me con `/importo` appeso.
+
 ## TODO aperti
 
-1. Pagamenti digitali (tab "Pagamento" nella ClientApp è ancora placeholder "disponibile a breve"; quando pronta, i dati di pagamento andranno richiesti al primo ordine — nota già presente nella tab)
+Nessuno. 🎉
 
 ## Verifica UI in locale (08/07/2026)
 

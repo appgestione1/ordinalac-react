@@ -80,6 +80,10 @@ export default function ClientApp() {
   // Consegna
   const [delivery, setDelivery]     = useState('pickup');
   const [homeDelivery, setHomeDelivery] = useState(true); // servizio attivo per l'ottico
+
+  // Pagamento online: link configurato dall'ottico (vuoto = non attivo)
+  const [paymentLink, setPaymentLink] = useState('');
+  const [lastOrderTotal, setLastOrderTotal] = useState(null); // totale dell'ordine appena inviato (per "Paga ora")
   const [addrStreet, setAddrStreet] = useState('');
   const [addrNum, setAddrNum]       = useState('');
   const [addrCap, setAddrCap]       = useState('');
@@ -234,6 +238,7 @@ export default function ClientApp() {
       setPrivacy(true);
       setLensData(DEV_LENSDATA);
       setPricing(DEV_PRICING);
+      setPaymentLink('https://www.paypal.com/paypalme/otticodemo');
       setManufacturer('DAILIES');
       setOd({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
       setOs({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
@@ -248,6 +253,7 @@ export default function ClientApp() {
       setName('Mario Rossi'); setPhone('3331234567');
       setLensData(DEV_LENSDATA);
       setPricing(DEV_PRICING);
+      setPaymentLink('https://www.paypal.com/paypalme/otticodemo');
       setOd({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
       setOs({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
       setManufacturer('DAILIES');
@@ -367,9 +373,11 @@ export default function ClientApp() {
     settingsUnsub.current = onSnapshot(
       doc(db, 'optician_config', oid, 'settings', 'main'),
       s => {
-        const enabled = !(s.exists() && s.data().home_delivery === false);
+        const data = s.exists() ? s.data() : {};
+        const enabled = !(s.exists() && data.home_delivery === false);
         setHomeDelivery(enabled);
         if (!enabled) { setDelivery('pickup'); lss('delivery', 'pickup'); }
+        setPaymentLink(typeof data.payment_link === 'string' ? data.payment_link.trim() : '');
       },
       () => {}
     );
@@ -527,6 +535,10 @@ export default function ClientApp() {
         },
       });
 
+      // Totale dell'ordine appena inviato (mostrato accanto a "Paga ora":
+      // orderTotal si ricalcola con le quantità, che qui vengono resettate)
+      setLastOrderTotal(showTotal ? Math.round(orderTotal * 100) / 100 : null);
+
       // Reset quantità a 1 dopo l'ordine
       setQuickQtyOD('1'); setQuickQtyOS('1');
       lss('qtyOD', '1'); lss('qtyOS', '1');
@@ -545,7 +557,8 @@ export default function ClientApp() {
       }
 
       setOrderStatus('success');
-      setTimeout(() => setOrderStatus('idle'), 4000);
+      // Con pagamento online attivo la schermata resta aperta (pulsante "Paga ora")
+      if (!paymentLink) setTimeout(() => setOrderStatus('idle'), 4000);
     } catch (e) {
       console.error(e);
       setOrderStatus('error');
@@ -776,14 +789,26 @@ export default function ClientApp() {
         {/* Tab: Pagamento */}
         {activeTab === 'payment' && (
           <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
-            <div className="bg-gray-100 p-6 rounded-full mb-4">
-              <svg className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className={`p-6 rounded-full mb-4 ${paymentLink ? 'bg-green-50' : 'bg-gray-100'}`}>
+              <svg className={`h-12 w-12 ${paymentLink ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
               </svg>
             </div>
             <h2 className="text-xl font-bold text-gray-800">Pagamenti Digitali</h2>
-            <p className="text-gray-500 mt-2">Questa funzionalità sarà disponibile a breve.<br />Per ora il pagamento avverrà in negozio o alla consegna.</p>
-            <p className="text-gray-400 text-xs mt-3">Quando la sezione sarà attiva, al primo ordine ti chiederemo anche i dati di pagamento.</p>
+            {paymentLink ? (
+              <>
+                <p className="text-gray-500 mt-2">Il tuo Ottico accetta pagamenti online.<br />Dopo l'invio dell'ordine troverai il pulsante <strong>"Paga ora"</strong> con l'importo da pagare.</p>
+                <a href={paymentLink} target="_blank" rel="noopener noreferrer"
+                  className="mt-6 w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700">
+                  💳 Apri pagamento online
+                </a>
+                <p className="text-gray-400 text-xs mt-3">In alternativa puoi sempre pagare in negozio o alla consegna.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-500 mt-2">Il tuo Ottico non ha ancora attivato i pagamenti online.<br />Il pagamento avverrà in negozio o alla consegna.</p>
+              </>
+            )}
           </div>
         )}
 
@@ -838,6 +863,19 @@ export default function ClientApp() {
             <div className="text-green-500 text-5xl mb-4">✓</div>
             <h1 className="text-3xl font-bold text-gray-800">Grazie!</h1>
             <p className="text-lg text-gray-600 mt-4">Il tuo ordine è stato inviato.<br />Riceverai una notifica quando sarà pronto!</p>
+            {paymentLink && (
+              <div className="mt-6">
+                <a href={paymentLink} target="_blank" rel="noopener noreferrer"
+                  className="block w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700">
+                  💳 Paga ora{lastOrderTotal !== null ? ` · ${fmtEur(lastOrderTotal)}` : ''}
+                </a>
+                <p className="text-gray-400 text-xs mt-2">Oppure paga in negozio o alla consegna.</p>
+                <button onClick={() => setOrderStatus('idle')}
+                  className="mt-3 w-full bg-gray-100 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-200">
+                  Chiudi
+                </button>
+              </div>
+            )}
           </>
         )}
 
