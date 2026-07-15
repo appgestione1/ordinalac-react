@@ -209,9 +209,21 @@ Chiuso l'ultimo TODO: la tab "Pagamento" non è più un placeholder. Scelta dell
 - Verifica Playwright 16/16 con ottico di prova reale (dev fixtures, QR reale, ordine con Paga ora € 70,00, card Dashboard con precompilazione, aggiornamento real-time sul client, disattivazione) — account e dati di prova eliminati.
 - NB: il pagamento è "fiduciario": l'importo lo digita il cliente nel sistema esterno (PayPal.Me ecc. non ricevono l'importo dal link). Se un giorno serve importo precompilato → Stripe Payment Links con prezzo fisso o PayPal.Me con `/importo` appeso.
 
+## Metodi di pagamento alla scelta del cliente (15/07/2026, sera)
+
+Il cliente sceglie il metodo al momento dell'ordine (selettore "PAGAMENTO" a 3 pulsanti nella action view, persistito in `otticoApp_pay_method`):
+
+1. **🏪 In negozio / 🚚 Alla consegna** (default, etichetta segue il toggle delivery) → `payment: { method:'on_delivery', status:'unpaid' }`; comportamento classico, success si auto-chiude in 4s.
+2. **🔗 Con link** → `payment: { method:'link', status:'pending' }` = **ordine in attesa di pagamento, confermato al pagamento**. Success view: se l'ottico ha `payment_link` → "Paga ora · €tot" subito; altrimenti box ambra "il tuo ottico ti invierà un link (WhatsApp/email)". In entrambi i casi niente auto-chiusura + pulsante Chiudi.
+3. **💳 Carta** (disabilitato, badge "in arrivo") → predisposto per l'integrazione Stripe: si attiverà con `card_payments: true` in `optician_config/{uid}/settings/main` (letto già ora dallo stesso onSnapshot; se disattivato mentre selezionato → fallback 'later'). Ordine previsto: `{ method:'card', status:'pending' }`. **Richiede Firebase Blaze + Functions + Stripe (SetupIntent/PaymentIntent) — MAI salvare dati carta in Firestore.** L'utente attiverà Stripe più avanti.
+
+**Dashboard (OrderCard)**: riga stato pagamento per gli ordini col campo `payment` (i vecchi non la mostrano): badge 🕓 "In attesa di pagamento (· link inviato)" ambra / ✅ "Pagato il gg/mm" verde / 💶 "Paga alla consegna|in negozio" grigio. Pulsanti finché non pagato: **"🔗 Invia link"** (solo method link: apre wa.me col messaggio "paga qui: link + €totale", scrive `payment.link_sent_at`) e **"Segna pagato"** (con confirm: `payment.status='paid'` + `paid_at` — è la conferma manuale per Satispay/PayPal ecc. che non hanno webhook). Stampa ordine con riga Pagamento. Il messaggio ordine include "PAGAMENTO: …".
+
+Tab "Pagamento" della ClientApp: descrive le 3 modalità (carta con badge IN ARRIVO), niente più riferimento al vecchio flusso. Verifica Playwright 26/26 (selettore, tab, ordine link end-to-end con Invia link→wa.me e Segna pagato, ordine in negozio con auto-chiusura) — dati e account di prova eliminati.
+
 ## TODO aperti
 
-Nessuno. 🎉
+1. **Integrazione Stripe per la carta salvata** (l'utente attiverà Stripe e Firebase Blaze più avanti): Firebase Functions + Stripe SetupIntent (salvataggio carta al primo ordine) e PaymentIntent off-session al pulsante rosso con avviso "stai pagando con la carta ****XXXX"; webhook Checkout per auto-confermare gli ordini `method:'link'` pagati con link Stripe generati da noi. La UI client è già predisposta (`card_payments` flag + opzione Carta "in arrivo"). Decidere: account Stripe per ottico (consigliato) o centrale.
 
 ## Verifica UI in locale (08/07/2026)
 

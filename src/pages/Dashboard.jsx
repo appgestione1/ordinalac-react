@@ -371,6 +371,33 @@ function DashboardPanel({ user }) {
     }
   }
 
+  async function handleMarkPaid(orderId) {
+    if (!confirm('Confermi di aver ricevuto il pagamento di questo ordine?')) return;
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        'payment.status': 'paid', 'payment.paid_at': new Date(),
+      });
+    } catch {
+      alert('Errore nel salvataggio. Riprova.');
+    }
+  }
+
+  // Invia via WhatsApp il link di pagamento configurato, con l'importo dell'ordine
+  function handleSendPaymentLink(order) {
+    if (!paymentLink) {
+      alert('Configura prima il tuo link nella card "Pagamenti online" qui sopra.');
+      return;
+    }
+    const phone = order.client_info?.phone;
+    if (!phone) { alert('Questo ordine non ha un numero di telefono.'); return; }
+    let p = phone.replace(/[^0-9]/g, '');
+    if (!p.startsWith('39')) p = '39' + p;
+    const total = order.lens_order?.total;
+    const body = `Ciao ${order.patient_name || ''}, per confermare il tuo ordine Push&Go${total != null ? ` di ${fmtEur(total)}` : ''} puoi pagare qui: ${paymentLink}\nL'ordine sarà confermato alla ricezione del pagamento. Grazie!`;
+    window.open(`https://wa.me/${p}?text=${encodeURIComponent(body)}`, '_blank');
+    updateDoc(doc(db, 'orders', order.id), { 'payment.link_sent_at': new Date() }).catch(() => {});
+  }
+
   async function handleSupply(orderId, destination) {
     await updateDoc(doc(db, 'orders', orderId), {
       supply_request: { status: 'pending', destination, requested_at: new Date() }
@@ -565,7 +592,7 @@ function DashboardPanel({ user }) {
               <div className="space-y-4">
                 {filtered.length === 0
                   ? <div className="text-center p-10 bg-white rounded shadow-sm"><p className="text-gray-500">Nessun ordine trovato.</p></div>
-                  : filtered.map(order => <OrderCard key={order.id} order={order} onStatusChange={handleStatusChange} onDelete={handleDelete} onSupply={setSupplyOrder} />)
+                  : filtered.map(order => <OrderCard key={order.id} order={order} onStatusChange={handleStatusChange} onDelete={handleDelete} onSupply={setSupplyOrder} onMarkPaid={handleMarkPaid} onSendPaymentLink={handleSendPaymentLink} />)
                 }
               </div>
             </div>
@@ -624,11 +651,12 @@ function DashboardPanel({ user }) {
 }
 
 // ── Order Card ────────────────────────────────────────────────────────
-function OrderCard({ order, onStatusChange, onDelete, onSupply }) {
+function OrderCard({ order, onStatusChange, onDelete, onSupply, onMarkPaid, onSendPaymentLink }) {
   const status = order.status || 'new';
   const conf   = STATUS_CONFIG[status] || STATUS_CONFIG.new;
   const l      = order.lens_order || {};
   const isDel  = order.delivery?.mode === 'delivery';
+  const pay    = order.payment; // assente negli ordini vecchi
   const date   = order.timestamp?.seconds
     ? new Date(order.timestamp.seconds * 1000).toLocaleString('it-IT', { day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit' })
     : '';
@@ -680,6 +708,39 @@ function OrderCard({ order, onStatusChange, onDelete, onSupply }) {
         <div className="text-xs text-gray-600">📞 {order.client_info.phone}</div>
       )}
 
+      {/* Stato pagamento (solo ordini con campo payment) */}
+      {pay && (
+        <div className="flex justify-between items-center gap-2 flex-wrap">
+          {pay.status === 'paid' ? (
+            <span className="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-700">
+              ✅ Pagato{pay.paid_at?.seconds ? ' il ' + new Date(pay.paid_at.seconds * 1000).toLocaleDateString('it-IT') : ''}
+            </span>
+          ) : pay.method === 'link' ? (
+            <span className="px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-700">
+              🕓 In attesa di pagamento{pay.link_sent_at ? ' · link inviato' : ''}
+            </span>
+          ) : (
+            <span className="px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600">
+              💶 Paga {isDel ? 'alla consegna' : 'in negozio'}
+            </span>
+          )}
+          {pay.status !== 'paid' && (
+            <div className="flex gap-2">
+              {pay.method === 'link' && (
+                <button onClick={() => onSendPaymentLink(order)}
+                  className="px-2 py-1 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded text-xs font-bold transition">
+                  🔗 Invia link
+                </button>
+              )}
+              <button onClick={() => onMarkPaid(order.id)}
+                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-xs font-bold transition">
+                Segna pagato
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex justify-between items-center pt-2 border-t border-gray-100">
         <select value={status} onChange={e => onStatusChange(order.id, e.target.value)}
           className="text-xs border-gray-300 rounded shadow-sm py-1 pr-8">
@@ -717,6 +778,7 @@ function printOrder(order) {
     </table>
     ${l.total != null ? `<p style="text-align:right;font-size:16px"><b>TOTALE: ${fmtEur(l.total)}</b></p>` : ''}
     <p><b>Consegna:</b> ${order.delivery?.mode === 'delivery' ? order.delivery?.address_full : 'Ritiro in negozio'}</p>
+    ${order.payment ? `<p><b>Pagamento:</b> ${order.payment.status === 'paid' ? 'PAGATO' : order.payment.method === 'link' ? 'In attesa di pagamento (link)' : order.payment.method === 'card' ? 'Carta salvata' : 'Alla consegna / in negozio'}</p>` : ''}
     <script>window.print();window.close();<\/script></body></html>`);
   w.document.close();
 }
