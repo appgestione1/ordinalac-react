@@ -221,9 +221,21 @@ Il cliente sceglie il metodo al momento dell'ordine (selettore "PAGAMENTO" a 3 p
 
 Tab "Pagamento" della ClientApp: descrive le 3 modalità (carta con badge IN ARRIVO), niente più riferimento al vecchio flusso. Verifica Playwright 26/26 (selettore, tab, ordine link end-to-end con Invia link→wa.me e Segna pagato, ordine in negozio con auto-chiusura) — dati e account di prova eliminati.
 
+## Metodi di pagamento decisi dall'ottico + default del cliente (15/07/2026, notte)
+
+Terza iterazione pagamenti (sostituisce la card "Pagamenti online" a link singolo):
+
+- **Dato**: `optician_config/{uid}/settings/main.payment_methods` = `{ store:{enabled:true}, link:{enabled,url}, alma:{enabled,url}, card:{enabled} }`. Il vecchio `payment_link` viene **tenuto in sync** al salvataggio (compat app installate vecchie); in lettura la ClientApp usa `payment_methods` se presente, altrimenti fallback su `payment_link`.
+- **Dashboard — card "Pagamenti accettati"**: checkbox per metodo. Negozio/consegna sempre attivo (checkbox disabilitata), Link di pagamento + URL, **Rateizzazione Alma** (anche 1 rata) + URL, Carta salvata disabilitata "si attiva con l'integrazione Stripe — IN ARRIVO". `savePayMethods` valida (spunta senza URL → alert), auto-`https://`, scrive `payment_methods` con merge **senza toccare `card`** (la attiverà l'integrazione Stripe).
+- **ClientApp — tab Pagamento**: mostra SOLO i metodi abilitati (real-time dallo stesso onSnapshot delle settings); il cliente tocca una card per impostare il **predefinito** (badge blu PREDEFINITO, persistito in `otticoApp_pay_method`) che vale per ogni ordine, modificabile anche dal selettore in action view prima di ordinare. Se l'ottico disabilita il metodo predefinito → fallback automatico a negozio/consegna. Blocco Carta: descrizione "inserisci la carta una sola volta (custodita da Stripe, mai da noi), addebito automatico col pulsante rosso" — IN ARRIVO finché `card.enabled` è false.
+- **Action view**: selettore dinamico coi soli metodi abilitati (nascosto se c'è solo negozio/consegna); opzione '💠 Rate Alma'.
+- **Ordini `method:'alma'`**: stesso flusso pending del link (confermato al pagamento); success screen con pulsante viola "💠 Paga a rate con Alma · €tot" (o box "riceverai il link Alma"); Dashboard: badge "🕓 In attesa di pagamento · rate Alma", pulsante "💠 Invia link Alma" (wa.me con messaggio rate + totale), Segna pagato, stampa con riga dedicata.
+- Verifica Playwright 31/31 (tab con predefinito, selettore, ordine Alma end-to-end, card Dashboard con flag e URL, invio link Alma, disabilitazione real-time → opzioni sparite dal client) — dati e account di prova eliminati.
+- NB Alma: l'URL è il link della pagina di pagamento Alma del negozio (da dashboard Alma); per link per-ordine con importo servirebbe l'API Alma (backend) — per ora l'importo è nel messaggio WhatsApp.
+
 ## TODO aperti
 
-1. **Integrazione Stripe per la carta salvata** (l'utente attiverà Stripe e Firebase Blaze più avanti): Firebase Functions + Stripe SetupIntent (salvataggio carta al primo ordine) e PaymentIntent off-session al pulsante rosso con avviso "stai pagando con la carta ****XXXX"; webhook Checkout per auto-confermare gli ordini `method:'link'` pagati con link Stripe generati da noi. La UI client è già predisposta (`card_payments` flag + opzione Carta "in arrivo"). Decidere: account Stripe per ottico (consigliato) o centrale.
+1. **Integrazione Stripe per la carta salvata** (l'utente attiverà Stripe e Firebase Blaze più avanti): Firebase Functions + Stripe SetupIntent (il cliente salva la carta una volta nella tab Pagamento) e PaymentIntent off-session al pulsante rosso con conferma "stai pagando con la carta ****XXXX"; webhook Checkout per auto-confermare gli ordini pagati con link Stripe generati da noi. UI già predisposta: `payment_methods.card.enabled` (oggi sempre false) accende automaticamente checkbox Dashboard, card nella tab Pagamento e opzione nel selettore. Decidere: account Stripe per ottico (consigliato) o centrale.
 
 ## Verifica UI in locale (08/07/2026)
 

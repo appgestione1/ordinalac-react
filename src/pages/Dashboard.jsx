@@ -222,8 +222,9 @@ function DashboardPanel({ user }) {
   const [myLensData, setMyLensData]       = useState({});
   const [myPricingConfig, setMyPricingConfig] = useState({});
   const [homeDelivery, setHomeDelivery]   = useState(true);
-  const [paymentLink, setPaymentLink]     = useState('');   // link pagamento online (vuoto = disattivo)
-  const [paymentSaved, setPaymentSaved]   = useState(false);
+  // Metodi di pagamento accettati (negozio/consegna sempre attivo; carta arriverà con Stripe)
+  const [pm, setPm] = useState({ linkEnabled: false, linkUrl: '', almaEnabled: false, almaUrl: '' });
+  const [pmSaved, setPmSaved] = useState(false);
   const [search, setSearch]   = useState('');
   const [dateStart, setDateStart] = useState(() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().split('T')[0]; });
   const [dateEnd, setDateEnd]     = useState(() => new Date().toISOString().split('T')[0]);
@@ -312,22 +313,42 @@ function DashboardPanel({ user }) {
     getDoc(doc(db, 'optician_config', user.uid, 'settings', 'main')).then(s => {
       if (s.exists()) {
         setHomeDelivery(s.data().home_delivery !== false);
-        setPaymentLink(s.data().payment_link || '');
+        const d = s.data();
+        if (d.payment_methods) {
+          setPm({
+            linkEnabled: d.payment_methods.link?.enabled === true,
+            linkUrl: d.payment_methods.link?.url || '',
+            almaEnabled: d.payment_methods.alma?.enabled === true,
+            almaUrl: d.payment_methods.alma?.url || '',
+          });
+        } else if (d.payment_link) {
+          // migrazione dal vecchio campo singolo
+          setPm({ linkEnabled: true, linkUrl: d.payment_link, almaEnabled: false, almaUrl: '' });
+        }
       }
     });
   }, [user.uid]);
 
-  async function savePaymentLink() {
-    let link = paymentLink.trim();
-    if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
+  async function savePayMethods() {
+    const fix = u => { u = u.trim(); return u && !/^https?:\/\//i.test(u) ? 'https://' + u : u; };
+    const linkUrl = fix(pm.linkUrl), almaUrl = fix(pm.almaUrl);
+    if (pm.linkEnabled && !linkUrl) { alert('Inserisci il link di pagamento o togli la spunta.'); return; }
+    if (pm.almaEnabled && !almaUrl) { alert('Inserisci il link Alma o togli la spunta.'); return; }
     try {
-      await setDoc(doc(db, 'optician_config', user.uid, 'settings', 'main'),
-        { payment_link: link }, { merge: true });
-      setPaymentLink(link);
-      setPaymentSaved(true);
-      setTimeout(() => setPaymentSaved(false), 2500);
+      await setDoc(doc(db, 'optician_config', user.uid, 'settings', 'main'), {
+        payment_methods: {
+          store: { enabled: true },
+          link: { enabled: pm.linkEnabled, url: linkUrl },
+          alma: { enabled: pm.almaEnabled, url: almaUrl },
+          // card: gestita dall'integrazione Stripe (non toccata qui)
+        },
+        payment_link: pm.linkEnabled ? linkUrl : '', // compat app installate vecchie
+      }, { merge: true });
+      setPm(p => ({ ...p, linkUrl, almaUrl }));
+      setPmSaved(true);
+      setTimeout(() => setPmSaved(false), 2500);
     } catch {
-      alert('Errore nel salvataggio del link di pagamento. Riprova.');
+      alert('Errore nel salvataggio dei metodi di pagamento. Riprova.');
     }
   }
 
@@ -382,10 +403,12 @@ function DashboardPanel({ user }) {
     }
   }
 
-  // Invia via WhatsApp il link di pagamento configurato, con l'importo dell'ordine
+  // Invia via WhatsApp il link di pagamento adatto all'ordine (Alma per le rate)
   function handleSendPaymentLink(order) {
-    if (!paymentLink) {
-      alert('Configura prima il tuo link nella card "Pagamenti online" qui sopra.');
+    const isAlma = order.payment?.method === 'alma';
+    const url = isAlma ? (pm.almaEnabled && pm.almaUrl) : (pm.linkEnabled && pm.linkUrl);
+    if (!url) {
+      alert(`Configura prima il ${isAlma ? 'link Alma' : 'link di pagamento'} nella card "Pagamenti accettati" qui sopra.`);
       return;
     }
     const phone = order.client_info?.phone;
@@ -393,7 +416,9 @@ function DashboardPanel({ user }) {
     let p = phone.replace(/[^0-9]/g, '');
     if (!p.startsWith('39')) p = '39' + p;
     const total = order.lens_order?.total;
-    const body = `Ciao ${order.patient_name || ''}, per confermare il tuo ordine Push&Go${total != null ? ` di ${fmtEur(total)}` : ''} puoi pagare qui: ${paymentLink}\nL'ordine sarà confermato alla ricezione del pagamento. Grazie!`;
+    const body = isAlma
+      ? `Ciao ${order.patient_name || ''}, per confermare il tuo ordine Push&Go${total != null ? ` di ${fmtEur(total)}` : ''} puoi pagare a rate con Alma qui: ${url}\nL'ordine sarà confermato alla ricezione del pagamento. Grazie!`
+      : `Ciao ${order.patient_name || ''}, per confermare il tuo ordine Push&Go${total != null ? ` di ${fmtEur(total)}` : ''} puoi pagare qui: ${url}\nL'ordine sarà confermato alla ricezione del pagamento. Grazie!`;
     window.open(`https://wa.me/${p}?text=${encodeURIComponent(body)}`, '_blank');
     updateDoc(doc(db, 'orders', order.id), { 'payment.link_sent_at': new Date() }).catch(() => {});
   }
@@ -568,22 +593,48 @@ function DashboardPanel({ user }) {
                 </label>
               </div>
 
-              {/* Pagamenti online (link esterno: PayPal.Me, Satispay, Stripe...) */}
-              <div className={`p-3 rounded shadow-sm text-sm border-l-4 ${paymentLink ? 'bg-emerald-50 border-emerald-500' : 'bg-gray-50 border-gray-400'}`}>
-                <span className={`font-bold ${paymentLink ? 'text-emerald-800' : 'text-gray-600'}`}>
-                  Pagamenti online: {paymentLink ? 'attivi' : 'non configurati'}
+              {/* Pagamenti accettati: l'ottico flagga i metodi offerti ai clienti */}
+              <div className={`p-3 rounded shadow-sm text-sm border-l-4 ${pm.linkEnabled || pm.almaEnabled ? 'bg-emerald-50 border-emerald-500' : 'bg-gray-50 border-gray-400'}`}>
+                <span className={`font-bold ${pm.linkEnabled || pm.almaEnabled ? 'text-emerald-800' : 'text-gray-600'}`}>
+                  Pagamenti accettati
                 </span>
-                <p className={`text-xs mt-0.5 ${paymentLink ? 'text-emerald-700' : 'text-gray-500'}`}>
-                  Incolla il link del tuo sistema di pagamento (PayPal.Me, Satispay, Stripe Payment Link...).
-                  Dopo l'ordine i clienti vedranno "Paga ora" con l'importo. Lascia vuoto per disattivare.
+                <p className={`text-xs mt-0.5 mb-2 ${pm.linkEnabled || pm.almaEnabled ? 'text-emerald-700' : 'text-gray-500'}`}>
+                  Spunta i metodi che offri: compariranno nell'app dei tuoi clienti, che sceglieranno il loro predefinito.
                 </p>
-                <div className="flex gap-2 mt-2">
-                  <input type="url" value={paymentLink} onChange={e => setPaymentLink(e.target.value)}
-                    placeholder="https://paypal.me/iltuonegozio"
-                    className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 bg-white" />
-                  <button onClick={savePaymentLink}
-                    className="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-semibold hover:bg-blue-700 flex-shrink-0">
-                    {paymentSaved ? '✓ Salvato' : 'Salva'}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-xs text-gray-500">
+                    <input type="checkbox" checked disabled className="h-4 w-4 rounded" />
+                    <span>🏪 <strong>In negozio / alla consegna</strong> — sempre disponibile</span>
+                  </label>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <label className="flex items-center gap-2 text-xs text-gray-700 sm:w-64 flex-shrink-0 cursor-pointer">
+                      <input type="checkbox" checked={pm.linkEnabled}
+                        onChange={e => setPm(p => ({ ...p, linkEnabled: e.target.checked }))} className="h-4 w-4 rounded" />
+                      <span>🔗 <strong>Link di pagamento</strong><br /><span className="text-gray-400">PayPal.Me, Satispay, Stripe...</span></span>
+                    </label>
+                    <input type="url" value={pm.linkUrl} onChange={e => setPm(p => ({ ...p, linkUrl: e.target.value }))}
+                      placeholder="https://paypal.me/iltuonegozio" disabled={!pm.linkEnabled}
+                      className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400" />
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <label className="flex items-center gap-2 text-xs text-gray-700 sm:w-64 flex-shrink-0 cursor-pointer">
+                      <input type="checkbox" checked={pm.almaEnabled}
+                        onChange={e => setPm(p => ({ ...p, almaEnabled: e.target.checked }))} className="h-4 w-4 rounded" />
+                      <span>💠 <strong>Rateizzazione Alma</strong><br /><span className="text-gray-400">anche una sola rata</span></span>
+                    </label>
+                    <input type="url" value={pm.almaUrl} onChange={e => setPm(p => ({ ...p, almaUrl: e.target.value }))}
+                      placeholder="https://pay.getalma.eu/iltuonegozio" disabled={!pm.almaEnabled}
+                      className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400" />
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-gray-400">
+                    <input type="checkbox" checked={false} disabled className="h-4 w-4 rounded" />
+                    <span>💳 <strong>Carta salvata</strong> — si attiva con l'integrazione Stripe <span className="bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full text-[10px] ml-1">IN ARRIVO</span></span>
+                  </label>
+                </div>
+                <div className="flex justify-end mt-2">
+                  <button onClick={savePayMethods}
+                    className="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-semibold hover:bg-blue-700">
+                    {pmSaved ? '✓ Salvato' : 'Salva'}
                   </button>
                 </div>
               </div>
@@ -715,9 +766,9 @@ function OrderCard({ order, onStatusChange, onDelete, onSupply, onMarkPaid, onSe
             <span className="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-700">
               ✅ Pagato{pay.paid_at?.seconds ? ' il ' + new Date(pay.paid_at.seconds * 1000).toLocaleDateString('it-IT') : ''}
             </span>
-          ) : pay.method === 'link' ? (
+          ) : pay.method === 'link' || pay.method === 'alma' ? (
             <span className="px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-700">
-              🕓 In attesa di pagamento{pay.link_sent_at ? ' · link inviato' : ''}
+              🕓 In attesa di pagamento{pay.method === 'alma' ? ' · rate Alma' : ''}{pay.link_sent_at ? ' · link inviato' : ''}
             </span>
           ) : (
             <span className="px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600">
@@ -726,10 +777,10 @@ function OrderCard({ order, onStatusChange, onDelete, onSupply, onMarkPaid, onSe
           )}
           {pay.status !== 'paid' && (
             <div className="flex gap-2">
-              {pay.method === 'link' && (
+              {(pay.method === 'link' || pay.method === 'alma') && (
                 <button onClick={() => onSendPaymentLink(order)}
                   className="px-2 py-1 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded text-xs font-bold transition">
-                  🔗 Invia link
+                  {pay.method === 'alma' ? '💠 Invia link Alma' : '🔗 Invia link'}
                 </button>
               )}
               <button onClick={() => onMarkPaid(order.id)}
@@ -778,7 +829,7 @@ function printOrder(order) {
     </table>
     ${l.total != null ? `<p style="text-align:right;font-size:16px"><b>TOTALE: ${fmtEur(l.total)}</b></p>` : ''}
     <p><b>Consegna:</b> ${order.delivery?.mode === 'delivery' ? order.delivery?.address_full : 'Ritiro in negozio'}</p>
-    ${order.payment ? `<p><b>Pagamento:</b> ${order.payment.status === 'paid' ? 'PAGATO' : order.payment.method === 'link' ? 'In attesa di pagamento (link)' : order.payment.method === 'card' ? 'Carta salvata' : 'Alla consegna / in negozio'}</p>` : ''}
+    ${order.payment ? `<p><b>Pagamento:</b> ${order.payment.status === 'paid' ? 'PAGATO' : order.payment.method === 'link' ? 'In attesa di pagamento (link)' : order.payment.method === 'alma' ? 'In attesa di pagamento (rate Alma)' : order.payment.method === 'card' ? 'Carta salvata' : 'Alla consegna / in negozio'}</p>` : ''}
     <script>window.print();window.close();<\/script></body></html>`);
   w.document.close();
 }

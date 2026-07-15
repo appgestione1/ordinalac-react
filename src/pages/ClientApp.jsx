@@ -82,12 +82,17 @@ export default function ClientApp() {
   const [delivery, setDelivery]     = useState('pickup');
   const [homeDelivery, setHomeDelivery] = useState(true); // servizio attivo per l'ottico
 
-  // Pagamento online: link configurato dall'ottico (vuoto = non attivo)
-  const [paymentLink, setPaymentLink] = useState('');
+  // Metodi di pagamento accettati dall'ottico (da settings, real-time).
+  // 'store' è sempre disponibile; card si attiverà con l'integrazione Stripe.
+  const [payMethods, setPayMethods] = useState({
+    store: true,
+    link: { enabled: false, url: '' },
+    alma: { enabled: false, url: '' },
+    card: { enabled: false },
+  });
   const [lastOrderTotal, setLastOrderTotal] = useState(null); // totale dell'ordine appena inviato (per "Paga ora")
-  // Metodo scelto dal cliente: 'later' (consegna/negozio) | 'link' | 'card' (richiede Stripe, in arrivo)
+  // Metodo predefinito scelto dal cliente: 'later' | 'link' | 'alma' | 'card'
   const [payMethod, setPayMethod] = useState('later');
-  const [cardPayments, setCardPayments] = useState(false); // l'ottico ha attivato la carta salvata (futuro Stripe)
   const [addrStreet, setAddrStreet] = useState('');
   const [addrNum, setAddrNum]       = useState('');
   const [addrCap, setAddrCap]       = useState('');
@@ -242,7 +247,7 @@ export default function ClientApp() {
       setPrivacy(true);
       setLensData(DEV_LENSDATA);
       setPricing(DEV_PRICING);
-      setPaymentLink('https://www.paypal.com/paypalme/otticodemo');
+      setPayMethods({ store: true, link: { enabled: true, url: 'https://www.paypal.com/paypalme/otticodemo' }, alma: { enabled: true, url: 'https://pay.getalma.eu/otticodemo' }, card: { enabled: false } });
       setManufacturer('DAILIES');
       setOd({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
       setOs({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
@@ -257,7 +262,7 @@ export default function ClientApp() {
       setName('Mario Rossi'); setPhone('3331234567');
       setLensData(DEV_LENSDATA);
       setPricing(DEV_PRICING);
-      setPaymentLink('https://www.paypal.com/paypalme/otticodemo');
+      setPayMethods({ store: true, link: { enabled: true, url: 'https://www.paypal.com/paypalme/otticodemo' }, alma: { enabled: true, url: 'https://pay.getalma.eu/otticodemo' }, card: { enabled: false } });
       setOd({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Sferica', pwr: '-2.50', cyl: '', axis: '', add: '' });
       setOs({ qty: '1', model: 'DAILIES TOTAL1', type: 'Giornaliera Torica', pwr: '-1.75', cyl: '-0.75', axis: '180', add: '' });
       setManufacturer('DAILIES');
@@ -382,10 +387,27 @@ export default function ClientApp() {
         const enabled = !(s.exists() && data.home_delivery === false);
         setHomeDelivery(enabled);
         if (!enabled) { setDelivery('pickup'); lss('delivery', 'pickup'); }
-        setPaymentLink(typeof data.payment_link === 'string' ? data.payment_link.trim() : '');
-        setCardPayments(data.card_payments === true); // attivabile solo con l'integrazione Stripe
-        // Se la carta viene disattivata mentre era selezionata, ripiega su "alla consegna"
-        if (data.card_payments !== true) setPayMethod(m => (m === 'card' ? 'later' : m));
+        // payment_methods (nuovo) con fallback al vecchio payment_link singolo
+        const pm = data.payment_methods;
+        const legacyLink = typeof data.payment_link === 'string' ? data.payment_link.trim() : '';
+        const norm = pm ? {
+          store: true,
+          link: { enabled: pm.link?.enabled === true && !!(pm.link?.url || '').trim(), url: (pm.link?.url || '').trim() },
+          alma: { enabled: pm.alma?.enabled === true && !!(pm.alma?.url || '').trim(), url: (pm.alma?.url || '').trim() },
+          card: { enabled: pm.card?.enabled === true },
+        } : {
+          store: true,
+          link: { enabled: !!legacyLink, url: legacyLink },
+          alma: { enabled: false, url: '' },
+          card: { enabled: false },
+        };
+        setPayMethods(norm);
+        // Se il metodo predefinito del cliente non è più offerto, ripiega su negozio/consegna
+        setPayMethod(m => {
+          const stillOk = m === 'later' || (m === 'link' && norm.link.enabled)
+            || (m === 'alma' && norm.alma.enabled) || (m === 'card' && norm.card.enabled);
+          return stillOk ? m : 'later';
+        });
       },
       () => {}
     );
@@ -508,10 +530,12 @@ export default function ClientApp() {
       ? `**CONSEGNA A DOMICILIO**\n${addrFull}\n`
       : `**RITIRO IN NEGOZIO**\n`;
     const payLabel = payMethod === 'link'
-      ? 'In attesa di link di pagamento'
-      : payMethod === 'card'
-        ? 'Carta salvata'
-        : (delivery === 'delivery' ? 'Alla consegna' : 'In negozio');
+      ? 'Link di pagamento — in attesa'
+      : payMethod === 'alma'
+        ? 'Rateizzazione Alma — in attesa'
+        : payMethod === 'card'
+          ? 'Carta salvata'
+          : (delivery === 'delivery' ? 'Alla consegna' : 'In negozio');
     msg += `PAGAMENTO: ${payLabel}\n`;
     msg += `\n--- ORDINE LENTI ---\nOrdine: ${manufacturer}\n\n`;
     msg += `OCCHIO DESTRO [${quickQtyOD} pz.]\nModello: ${od.model || 'N/D'}\nTipo: ${od.type || 'N/D'}\n`;
@@ -547,9 +571,9 @@ export default function ClientApp() {
           os: { qty: quickQtyOS, model: os.model, type: os.type, pwr: os.pwr, cyl: os.cyl, axis: os.axis, add: os.add, price: priceOS },
           total: showTotal ? Math.round(orderTotal * 100) / 100 : null,
         },
-        // 'link' → l'ordine resta "in attesa di pagamento" finché l'ottico non lo segna pagato
-        payment: payMethod === 'link'
-          ? { method: 'link', status: 'pending' }
+        // 'link'/'alma' → ordine "in attesa di pagamento" finché l'ottico non lo segna pagato
+        payment: payMethod === 'link' || payMethod === 'alma'
+          ? { method: payMethod, status: 'pending' }
           : payMethod === 'card'
             ? { method: 'card', status: 'pending' }
             : { method: 'on_delivery', status: 'unpaid' },
@@ -577,8 +601,8 @@ export default function ClientApp() {
       }
 
       setOrderStatus('success');
-      // Con pagamento via link la schermata resta aperta (Paga ora / istruzioni)
-      if (payMethod !== 'link') setTimeout(() => setOrderStatus('idle'), 4000);
+      // Con pagamento via link/Alma la schermata resta aperta (Paga ora / istruzioni)
+      if (payMethod !== 'link' && payMethod !== 'alma') setTimeout(() => setOrderStatus('idle'), 4000);
     } catch (e) {
       console.error(e);
       setOrderStatus('error');
@@ -809,37 +833,51 @@ export default function ClientApp() {
         {/* Tab: Pagamento */}
         {activeTab === 'payment' && (
           <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
-            <div className={`p-6 rounded-full mb-4 ${paymentLink ? 'bg-green-50' : 'bg-gray-100'}`}>
-              <svg className={`h-12 w-12 ${paymentLink ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className={`p-6 rounded-full mb-4 ${payMethods.link.enabled || payMethods.alma.enabled || payMethods.card.enabled ? 'bg-green-50' : 'bg-gray-100'}`}>
+              <svg className={`h-12 w-12 ${payMethods.link.enabled || payMethods.alma.enabled || payMethods.card.enabled ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
               </svg>
             </div>
             <h2 className="text-xl font-bold text-gray-800">Pagamenti</h2>
+            <p className="text-gray-500 text-xs mt-1">Questi sono i metodi accettati dal tuo Ottico.<br />Scegli il <strong>predefinito</strong>: varrà per ogni ordine (puoi cambiarlo anche prima di ordinare).</p>
             <div className="mt-4 w-full space-y-3 text-left text-sm">
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <p className="font-bold text-gray-800">🏪 In negozio o alla consegna</p>
-                <p className="text-gray-500 text-xs mt-0.5">Paghi al ritiro in negozio o al corriere. Nessun pagamento anticipato.</p>
-              </div>
-              <div className={`rounded-lg p-3 border ${paymentLink ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
-                <p className="font-bold text-gray-800">🔗 Con link di pagamento</p>
-                <p className="text-gray-500 text-xs mt-0.5">
-                  {paymentLink
+              {[
+                { id: 'later', show: true, icon: '🏪', title: 'In negozio o alla consegna',
+                  desc: 'Paghi al ritiro in negozio o al corriere. Nessun pagamento anticipato.' },
+                { id: 'link', show: payMethods.link.enabled, icon: '🔗', title: 'Con link di pagamento',
+                  desc: payMethods.link.url
                     ? 'Dopo l\'ordine paghi subito online con "Paga ora". L\'ordine è confermato al pagamento.'
-                    : 'Il tuo Ottico ti invia un link (WhatsApp/email); paghi quando vuoi e l\'ordine è confermato al pagamento.'}
-                </p>
-                {paymentLink && (
-                  <a href={paymentLink} target="_blank" rel="noopener noreferrer"
-                    className="inline-block mt-2 text-green-700 font-bold text-xs underline">
-                    Apri pagamento online →
-                  </a>
-                )}
-              </div>
-              <div className="bg-gray-50 border border-dashed border-gray-300 rounded-lg p-3 opacity-70">
-                <p className="font-bold text-gray-600">💳 Carta salvata <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full ml-1">IN ARRIVO</span></p>
-                <p className="text-gray-500 text-xs mt-0.5">Salvi la carta in modo sicuro e l'ordine viene addebitato in automatico quando premi il pulsante rosso.</p>
-              </div>
+                    : 'Il tuo Ottico ti invia un link (WhatsApp/email); paghi quando vuoi e l\'ordine è confermato al pagamento.' },
+                { id: 'alma', show: payMethods.alma.enabled, icon: '💠', title: 'Rate con Alma',
+                  desc: 'Paghi a rate con Alma — anche una sola rata. L\'ordine è confermato al pagamento.' },
+              ].filter(m => m.show).map(m => (
+                <button key={m.id} onClick={() => { setPayMethod(m.id); lss('payMethod', m.id); }}
+                  className={`w-full text-left rounded-lg p-3 border transition ${payMethod === m.id ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-300' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}>
+                  <p className="font-bold text-gray-800 flex items-center justify-between">
+                    <span>{m.icon} {m.title}</span>
+                    {payMethod === m.id && <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full">PREDEFINITO</span>}
+                  </p>
+                  <p className="text-gray-500 text-xs mt-0.5">{m.desc}</p>
+                </button>
+              ))}
+
+              {/* Carta salvata: si attiva con l'integrazione Stripe (i dati carta li custodirà SOLO Stripe) */}
+              {payMethods.card.enabled ? (
+                <button onClick={() => { setPayMethod('card'); lss('payMethod', 'card'); }}
+                  className={`w-full text-left rounded-lg p-3 border transition ${payMethod === 'card' ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-300' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}>
+                  <p className="font-bold text-gray-800 flex items-center justify-between">
+                    <span>💳 Carta salvata</span>
+                    {payMethod === 'card' && <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full">PREDEFINITO</span>}
+                  </p>
+                  <p className="text-gray-500 text-xs mt-0.5">Inserisci la carta una sola volta (custodita in sicurezza da Stripe): ogni ordine viene addebitato in automatico col pulsante rosso.</p>
+                </button>
+              ) : (
+                <div className="bg-gray-50 border border-dashed border-gray-300 rounded-lg p-3 opacity-70">
+                  <p className="font-bold text-gray-600">💳 Carta salvata <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full ml-1">IN ARRIVO</span></p>
+                  <p className="text-gray-500 text-xs mt-0.5">Inserirai la carta una sola volta (custodita in sicurezza da Stripe, mai da noi) e ogni ordine verrà addebitato in automatico quando premi il pulsante rosso.</p>
+                </div>
+              )}
             </div>
-            <p className="text-gray-400 text-xs mt-4">Scegli il metodo che preferisci al momento dell'ordine.</p>
           </div>
         )}
 
@@ -894,28 +932,31 @@ export default function ClientApp() {
             <div className="text-green-500 text-5xl mb-4">✓</div>
             <h1 className="text-3xl font-bold text-gray-800">Grazie!</h1>
             <p className="text-lg text-gray-600 mt-4">Il tuo ordine è stato inviato.<br />Riceverai una notifica quando sarà pronto!</p>
-            {payMethod === 'link' && (
-              <div className="mt-6">
-                {paymentLink ? (
-                  <>
-                    <a href={paymentLink} target="_blank" rel="noopener noreferrer"
-                      className="block w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700">
-                      💳 Paga ora{lastOrderTotal !== null ? ` · ${fmtEur(lastOrderTotal)}` : ''}
-                    </a>
-                    <p className="text-gray-400 text-xs mt-2">L'ordine sarà confermato alla ricezione del pagamento.</p>
-                  </>
-                ) : (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800 text-left">
-                    🔗 Il tuo Ottico ti invierà a breve un <strong>link di pagamento</strong> (WhatsApp o email).
-                    L'ordine sarà confermato alla ricezione del pagamento.
-                  </div>
-                )}
-                <button onClick={() => setOrderStatus('idle')}
-                  className="mt-3 w-full bg-gray-100 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-200">
-                  Chiudi
-                </button>
-              </div>
-            )}
+            {(payMethod === 'link' || payMethod === 'alma') && (() => {
+              const payUrl = payMethod === 'alma' ? payMethods.alma.url : payMethods.link.url;
+              return (
+                <div className="mt-6">
+                  {payUrl ? (
+                    <>
+                      <a href={payUrl} target="_blank" rel="noopener noreferrer"
+                        className={`block w-full text-white font-bold py-3 rounded-lg ${payMethod === 'alma' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-green-600 hover:bg-green-700'}`}>
+                        {payMethod === 'alma' ? '💠 Paga a rate con Alma' : '💳 Paga ora'}{lastOrderTotal !== null ? ` · ${fmtEur(lastOrderTotal)}` : ''}
+                      </a>
+                      <p className="text-gray-400 text-xs mt-2">L'ordine sarà confermato alla ricezione del pagamento.</p>
+                    </>
+                  ) : (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800 text-left">
+                      🔗 Il tuo Ottico ti invierà a breve il <strong>{payMethod === 'alma' ? 'link per pagare a rate con Alma' : 'link di pagamento'}</strong> (WhatsApp o email).
+                      L'ordine sarà confermato alla ricezione del pagamento.
+                    </div>
+                  )}
+                  <button onClick={() => setOrderStatus('idle')}
+                    className="mt-3 w-full bg-gray-100 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-200">
+                    Chiudi
+                  </button>
+                </div>
+              );
+            })()}
           </>
         )}
 
@@ -987,34 +1028,39 @@ export default function ClientApp() {
             {/* Richiesta modifica prescrizione */}
             {changeReqSection()}
 
-            {/* Metodo di pagamento */}
-            <div className="mt-4 text-left">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Pagamento</p>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  ['later', delivery === 'delivery' ? '🚚 Alla consegna' : '🏪 In negozio', false],
-                  ['link', '🔗 Con link', false],
-                  ['card', '💳 Carta', !cardPayments],
-                ].map(([id, label, disabled]) => (
-                  <button key={id} disabled={disabled}
-                    onClick={() => { setPayMethod(id); lss('payMethod', id); }}
-                    className={`py-2 px-1 rounded-lg border text-xs font-semibold text-center transition ${
-                      disabled ? 'border-gray-200 text-gray-300 cursor-not-allowed'
-                      : payMethod === id ? 'border-blue-600 bg-blue-50 text-blue-700'
-                      : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
-                    {label}
-                    {disabled && <span className="block text-[9px] font-normal">in arrivo</span>}
-                  </button>
-                ))}
-              </div>
-              {payMethod === 'link' && (
-                <p className="text-[11px] text-gray-500 mt-1.5">
-                  {paymentLink
-                    ? 'Dopo l\'invio potrai pagare subito online. L\'ordine sarà confermato al pagamento.'
-                    : 'Il tuo Ottico ti invierà un link di pagamento. L\'ordine sarà confermato al pagamento.'}
-                </p>
-              )}
-            </div>
+            {/* Metodo di pagamento: solo quelli accettati dall'ottico */}
+            {(() => {
+              const opts = [['later', delivery === 'delivery' ? '🚚 Alla consegna' : '🏪 In negozio']];
+              if (payMethods.link.enabled) opts.push(['link', '🔗 Con link']);
+              if (payMethods.alma.enabled) opts.push(['alma', '💠 Rate Alma']);
+              if (payMethods.card.enabled) opts.push(['card', '💳 Carta']);
+              if (opts.length < 2) return null; // solo negozio/consegna: niente da scegliere
+              return (
+                <div className="mt-4 text-left">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Pagamento</p>
+                  <div className={`grid gap-2 ${opts.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    {opts.map(([id, label]) => (
+                      <button key={id}
+                        onClick={() => { setPayMethod(id); lss('payMethod', id); }}
+                        className={`py-2 px-1 rounded-lg border text-xs font-semibold text-center transition ${
+                          payMethod === id ? 'border-blue-600 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {(payMethod === 'link' || payMethod === 'alma') && (
+                    <p className="text-[11px] text-gray-500 mt-1.5">
+                      {payMethod === 'alma'
+                        ? 'Paghi a rate con Alma (anche una sola). L\'ordine sarà confermato al pagamento.'
+                        : (payMethods.link.url
+                          ? 'Dopo l\'invio potrai pagare subito online. L\'ordine sarà confermato al pagamento.'
+                          : 'Il tuo Ottico ti invierà un link di pagamento. L\'ordine sarà confermato al pagamento.')}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Toggle consegna + pulsanti */}
             <div className="flex items-center justify-between my-4 space-x-2">
